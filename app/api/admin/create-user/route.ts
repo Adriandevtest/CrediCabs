@@ -1,0 +1,49 @@
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  try {
+    const { email, password, nombre, telefono, rol } = await request.json();
+
+    if (!email || !password || !nombre || !rol) {
+      return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
+    }
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    // 1. Crear el usuario en Auth sin iniciar sesión en el cliente
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirmar el email para acceso inmediato
+      user_metadata: {
+        nombre_completo: nombre,
+        rol: rol
+      }
+    });
+
+    if (authError) throw authError;
+    if (!authData.user) throw new Error('No se pudo crear el usuario en Auth.');
+
+    // 2. Crear el registro inicial en la tabla profiles
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: authData.user.id,
+        nombre_completo: nombre,
+        telefono: telefono,
+        email: email,
+        rol: rol
+      });
+
+    if (profileError) throw profileError;
+
+    return NextResponse.json({ success: true, userId: authData.user.id });
+  } catch (error: any) {
+    console.error("Error en create-user API:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
