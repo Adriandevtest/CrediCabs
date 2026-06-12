@@ -11,6 +11,7 @@ import { supabase } from "../lib/supabase";
 export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }: { searchQuery: string, statusFilter: string }) {
   const [clientes, setClientes] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => {
     fetchClientes();
@@ -20,6 +21,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     const { data } = await supabase
       .from('clientes')
       .select(`
+        id,
         numero_cliente, 
         profiles ( nombre_completo ), 
         creditos ( id, monto_total, monto_diario, estado, semanas_autorizadas )
@@ -39,6 +41,53 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       alert(`Cliente marcado como ${nuevoEstado}`);
       fetchClientes(); 
       setSelectedUser(null);
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: Eliminar cliente en cascada
+  const eliminarCliente = async () => {
+    if (!selectedUser) return;
+
+    const confirmar = window.confirm(
+      `¿Estás seguro de eliminar a "${selectedUser.profiles?.nombre_completo}"? Esta acción no se puede deshacer.`
+    );
+    if (!confirmar) return;
+
+    setEliminando(true);
+    try {
+      const creditoIds = (selectedUser.creditos || []).map((c: any) => c.id);
+
+      // 1. Eliminar pagos_diarios relacionados
+      if (creditoIds.length > 0) {
+        const { error: errorPagos } = await supabase
+          .from('pagos_diarios')
+          .delete()
+          .in('credito_id', creditoIds);
+        if (errorPagos) throw errorPagos;
+      }
+
+      // 2. Eliminar créditos del cliente
+      const { error: errorCreditos } = await supabase
+        .from('creditos')
+        .delete()
+        .eq('cliente_id', selectedUser.id);
+      if (errorCreditos) throw errorCreditos;
+
+      // 3. Eliminar el cliente
+      const { error: errorCliente } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', selectedUser.id);
+      if (errorCliente) throw errorCliente;
+
+      alert('Cliente eliminado correctamente.');
+      setSelectedUser(null);
+      fetchClientes();
+    } catch (error) {
+      console.error('Error al eliminar cliente:', error);
+      alert('Ocurrió un error al eliminar el cliente.');
+    } finally {
+      setEliminando(false);
     }
   };
 
@@ -96,7 +145,6 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     
     const filter = (statusFilter || 'todos').toLowerCase();
     const matchesStatus = filter === 'todos' || estadoActual === filter;
-    
     const matchesSearch = !term || nombre.includes(term) || numero.includes(term);
     
     return matchesStatus && matchesSearch;
@@ -170,14 +218,24 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
                             ) : <p className="text-red-500 text-sm">Sin crédito activo.</p>}
                             
                             <div className="text-sm text-gray-300 border-t pt-4">
-                                <p><strong>ID Cliente:</strong> {selectedUser?.numero_cliente}</p>
-                                <p><strong>Pago Diario:</strong> ${Math.round(selectedUser?.credito?.monto_diario || 0)}</p>
+                              <p><strong>ID Cliente:</strong> {selectedUser?.numero_cliente}</p>
+                              <p><strong>Pago Diario:</strong> ${Math.round(selectedUser?.credito?.monto_diario || 0)}</p>
                             </div>
 
-                            <div className="mt-4">
-                                <Button className="w-full bg-red-600 hover:bg-red-700" onClick={imprimirEstado}>
-                                    Imprimir Estado
-                                </Button>
+                            <div className="mt-4 flex flex-col gap-2">
+                              <Button className="w-full bg-red-600 hover:bg-red-700" onClick={imprimirEstado}>
+                                Imprimir Estado
+                              </Button>
+
+                              {/* ✅ BOTÓN ELIMINAR */}
+                              <Button
+                                className="w-full"
+                                variant="destructive"
+                                onClick={eliminarCliente}
+                                disabled={eliminando}
+                              >
+                                {eliminando ? 'Eliminando...' : '🗑 Eliminar Cliente'}
+                              </Button>
                             </div>
                           </div>
                         </DialogContent>
