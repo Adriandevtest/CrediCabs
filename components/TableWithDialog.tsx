@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { supabase } from "../lib/supabase";
+import { ImageLightbox } from "./ImageLightbox";
 
 export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }: { searchQuery: string, statusFilter?: string }) {
   const [clientes, setClientes] = useState<any[]>([]);
@@ -26,6 +27,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   const [showNuevoCredito, setShowNuevoCredito] = useState(false);
   const [nuevoCredito, setNuevoCredito] = useState({ monto_total: 0, num_pagos: 28, tasa: 0 });
   const [agregandoCredito, setAgregandoCredito] = useState(false);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   useEffect(() => {
     fetchClientes();
@@ -306,9 +308,22 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     }
   };
 
-  const imprimirEstado = () => {
+  const imprimirEstado = async () => {
   if (!selectedUser) return;
-  
+
+  // Convertir logo a data URL para que se muestre en la ventana de impresión (blob URL)
+  let logoDataUrl = '';
+  try {
+    const res = await fetch('/logo.png');
+    const blob = await res.blob();
+    logoDataUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    // Logo no se mostrará si falla el fetch
+  }
   const fechaActual = new Date();
   const fechaProximoPago = new Date(fechaActual);
   
@@ -418,18 +433,60 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
             color: #999;
             text-align: center;
           }
+          .btn-back {
+            display: none;
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            background: #1f2937;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 999;
+          }
+          .btn-back-mobile {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1f2937;
+            color: white;
+            border: none;
+            padding: 18px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 999;
+            border-top: 1px solid #374151;
+          }
+          @media screen and (min-width: 641px) {
+            .btn-back { display: block; }
+          }
+          @media screen and (max-width: 640px) {
+            .btn-back-mobile { display: block; }
+            body { padding-bottom: 80px; }
+          }
+          @media print {
+            .btn-back, .btn-back-mobile { display: none !important; }
+          }
         </style>
       </head>
       <body>
+        <button class="btn-back" onclick="window.close()">← Cerrar</button>
+        <button class="btn-back-mobile" onclick="window.close()">← Regresar</button>
         <div class="watermark">CrediCabs</div>
-        
+
         <div class="container">
           <div class="header">
             <div class="header-text">
               <h1>Estado de Cuenta</h1>
               <p class="fecha">Impreso el: ${fechaHoy}</p>
             </div>
-            <img src="/logo.png" alt="CrediCabs Logo" class="logo" />
+            ${logoDataUrl ? `<img src="${logoDataUrl}" alt="CrediCabs Logo" class="logo" />` : '<div style="width:140px"></div>'}
           </div>
 
           <div class="section">
@@ -794,19 +851,27 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
                       {detalleExtra?.ine_url && (
                         <div className="space-y-1">
                           <p className="text-[10px] text-gray-500 text-center uppercase tracking-wide">INE</p>
-                          <a href={detalleExtra.ine_url} target="_blank" rel="noopener noreferrer">
+                          <button
+                            type="button"
+                            onClick={() => setLightbox({ src: detalleExtra.ine_url, alt: 'Foto INE' })}
+                            className="w-full block"
+                          >
                             <img src={detalleExtra.ine_url} alt="INE"
-                              className="w-full h-32 object-cover rounded-xl border border-gray-700 hover:border-yellow-500 transition-colors cursor-pointer" />
-                          </a>
+                              className="w-full h-32 object-cover rounded-xl border border-gray-700 hover:border-yellow-500 active:opacity-70 transition-all cursor-pointer" />
+                          </button>
                         </div>
                       )}
                       {detalleExtra?.comprobante_url && (
                         <div className="space-y-1">
                           <p className="text-[10px] text-gray-500 text-center uppercase tracking-wide">Comprobante</p>
-                          <a href={detalleExtra.comprobante_url} target="_blank" rel="noopener noreferrer">
+                          <button
+                            type="button"
+                            onClick={() => setLightbox({ src: detalleExtra.comprobante_url, alt: 'Comprobante de Domicilio' })}
+                            className="w-full block"
+                          >
                             <img src={detalleExtra.comprobante_url} alt="Comprobante"
-                              className="w-full h-32 object-cover rounded-xl border border-gray-700 hover:border-yellow-500 transition-colors cursor-pointer" />
-                          </a>
+                              className="w-full h-32 object-cover rounded-xl border border-gray-700 hover:border-yellow-500 active:opacity-70 transition-all cursor-pointer" />
+                          </button>
                         </div>
                       )}
                     </div>
@@ -836,6 +901,11 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl shadow-2xl overflow-hidden w-full">
+
+      {/* Lightbox para fotos de documentos */}
+      {lightbox && (
+        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
+      )}
 
       {/* Dialog único compartido por móvil y escritorio */}
       <Dialog

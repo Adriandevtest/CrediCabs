@@ -48,7 +48,7 @@ export default function RootLayout({
           2. overflow-y-auto: permite scroll dentro de la página
           3. pb-20: espacio para que el contenido final no se tape con la nav móvil
         */}
-        <main className="flex-grow overflow-y-auto pb-24 md:pb-0 w-full">
+        <main className="flex-grow overflow-y-auto md:pb-0 w-full" style={{ paddingBottom: 'max(6rem, calc(5rem + env(safe-area-inset-bottom, 0px)))' }}>
           {children}
         </main>
         

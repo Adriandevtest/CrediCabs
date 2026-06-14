@@ -71,7 +71,8 @@ export default function MobileNav() {
   // ── NAV ASESOR ────────────────────────────────────────────
   if (pathname === '/asesor') {
     return (
-      <nav className={`fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-24' : 'translate-y-0'}`}>
+      <nav className={`fixed left-4 right-4 md:hidden z-[45] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-28' : 'translate-y-0'}`}
+        style={{ bottom: 'max(1rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)))' }}>
         {ASESOR_TABS.map(({ hash, label, icon }) => {
           const isActive = activeHash === hash || (hash === '' && (activeHash === '' || activeHash === '#nueva'));
           return (
@@ -95,7 +96,8 @@ export default function MobileNav() {
   // ── NAV COBRADOR ──────────────────────────────────────────
   if (pathname === '/cobrador') {
     return (
-      <nav className={`fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-24' : 'translate-y-0'}`}>
+      <nav className={`fixed left-4 right-4 md:hidden z-[45] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-28' : 'translate-y-0'}`}
+        style={{ bottom: 'max(1rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)))' }}>
         {COBRADOR_TABS.map(({ hash, label, icon }) => {
           const isActive = activeHash === hash || (hash === '' && (activeHash === '' || activeHash === '#ruta'));
           return (
@@ -129,7 +131,8 @@ export default function MobileNav() {
   };
 
   return (
-    <nav className={`fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-[#ca1444] rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-white/10 transition-transform duration-300 ${hidden ? 'translate-y-24' : 'translate-y-0'}`}>
+    <nav className="fixed left-4 right-4 md:hidden z-[45] h-16 bg-[#ca1444] rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-white/10"
+      style={{ bottom: 'max(1rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)))' }}>
       <Link href="/" className={getIconClass('/')} title="Inicio">
         <i className="fa-solid fa-house text-2xl" />
       </Link>

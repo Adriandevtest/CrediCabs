@@ -60,13 +60,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="h-screen flex flex-col items-center justify-center relative overflow-hidden w-full bg-cover bg-center bg-no-repeat bg-fixed"
-      style={{ backgroundImage: "url('/fondo.jpg')" }}
-    >
-      <div className="absolute inset-0 bg-black/60 z-0 backdrop-blur-[2px]"></div>
+    <div className="relative overflow-hidden flex flex-col items-center justify-center" style={{ height: '100dvh' }}>
+      {/* Fondo con position:absolute dentro del contenedor overflow-hidden — no se mueve en iOS */}
+      <div
+        className="absolute inset-0 -z-10 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/fondo.jpg')" }}
+      />
+      <div className="absolute inset-0 -z-[5] bg-black/60 backdrop-blur-[2px]" />
 
-      <div className="relative z-10 w-full max-w-sm rounded-3xl bg-gradient-to-r from-[#ffffff15] to-[#12121280] backdrop-blur-md shadow-2xl p-8 flex flex-col items-center border border-white/10">
+      <div className="relative z-10 w-full max-w-sm mx-4 rounded-3xl bg-gradient-to-r from-[#ffffff15] to-[#12121280] backdrop-blur-md shadow-2xl p-8 flex flex-col items-center border border-white/10">
         
         <div className="flex items-center justify-center w-24 h-24 rounded-full bg-white/5 mb-4 shadow-lg border border-white/10 overflow-hidden">
           <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = "https://ui-avatars.com/api/?name=CC&background=EAB308&color=000&size=150"; }}/>
