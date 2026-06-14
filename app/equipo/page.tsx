@@ -8,6 +8,7 @@ import UserNav from '../../components/UserNav';
 // Componentes de Shadcn
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { AnimatedStaffForm } from '../../components/AnimatedStaffForm';
+import { LumaSpin } from '../../components/luma-spin';
 
 export default function EquipoPage() {
   const [equipo, setEquipo] = useState<any[]>([]);
@@ -91,10 +92,19 @@ export default function EquipoPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-950 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* Navegación Superior */}
+    <main className="min-h-screen bg-gray-950 pb-20 md:p-8">
+      {/* Header móvil sticky — fuera del contenedor con padding */}
+      <header className="md:hidden sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-4 py-3 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-black text-white leading-tight">Gestión de <span className="text-red-600">Personal</span></h1>
+          <p className="text-gray-500 text-[9px] uppercase tracking-widest">Equipo en Campo</p>
+        </div>
+        <UserNav />
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 md:px-0">
+
+        {/* Navegación Superior — solo desktop */}
         <nav className="hidden md:flex justify-between items-center border-b border-gray-800 py-4 mb-8">
           <div className="flex gap-4">
             <Link href="/" className="px-5 py-2 text-gray-400 hover:text-yellow-500 transition-colors font-medium">Dashboard</Link>
@@ -107,13 +117,11 @@ export default function EquipoPage() {
           </div>
         </nav>
 
-        <header className="pt-6 pb-4 md:pt-0 md:border-b border-red-900 md:pb-6 flex justify-between items-center mb-8">
+        {/* Header desktop */}
+        <header className="hidden md:flex pt-0 pb-6 border-b border-red-900 justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl md:text-4xl font-black text-white">Gestión de <span className="text-red-600">Personal</span></h1>
-            <p className="text-gray-400 text-[10px] md:text-base tracking-widest uppercase">Equipo en Campo</p>
-          </div>
-          <div className="md:hidden">
-            <UserNav />
+            <h1 className="text-4xl font-black text-white">Gestión de <span className="text-red-600">Personal</span></h1>
+            <p className="text-gray-400 text-base tracking-widest uppercase">Equipo en Campo</p>
           </div>
         </header>
 
@@ -151,7 +159,11 @@ export default function EquipoPage() {
               <span className="bg-gray-800 text-gray-300 text-xs px-3 py-1 rounded-full font-bold">{equipo.length}</span>
             </div>
 
-            {loading ? <div className="text-yellow-500 font-bold p-8 text-center">Cargando...</div> : (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <LumaSpin />
+              </div>
+            ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {equipo.map((miembro) => (
                   <div key={miembro.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-yellow-500 transition-colors flex flex-col gap-3 shadow-lg">

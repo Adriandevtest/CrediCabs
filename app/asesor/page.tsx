@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import AsesorForm from '../../components/AsesorForm';
 import UserNav from '../../components/UserNav';
 import GeoTracker from '../../components/GeoTracker';
+import { LumaSpin } from '../../components/luma-spin';
 
 type Tab = 'nueva' | 'solicitudes' | 'perfil';
 type GpsEstado = 'inactivo' | 'activo' | 'error' | 'sin_soporte';
@@ -148,9 +149,8 @@ export default function AsesorPage() {
             </div>
 
             {loadingSolicitudes ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-500 text-sm">Cargando solicitudes...</p>
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <LumaSpin />
               </div>
             ) : solicitudes.length === 0 ? (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl text-center py-12 px-6">

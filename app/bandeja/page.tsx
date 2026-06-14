@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
 import { InterestBreakdown } from '../../components/InterestBreakdown';
+import { LumaSpin } from '../../components/luma-spin';
 
 export default function BandejaPage() {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
@@ -111,10 +112,19 @@ export default function BandejaPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-950 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* Navegación */}
+    <main className="min-h-screen bg-gray-950 pb-20 md:p-8">
+      {/* Header móvil sticky — fuera del contenedor con padding */}
+      <header className="md:hidden sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-4 py-3 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-black text-white leading-tight">Revisión de <span className="text-red-600">Prospectos</span></h1>
+          <p className="text-gray-500 text-[9px] uppercase tracking-widest">Bandeja de Entrada</p>
+        </div>
+        <UserNav />
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 md:px-0">
+
+        {/* Navegación — solo desktop */}
         <nav className="hidden md:flex justify-between items-center border-b border-gray-800 py-4 mb-8">
           <div className="flex gap-4">
             <Link href="/" className="px-5 py-2 text-gray-400 hover:text-yellow-500 transition-colors font-medium">Dashboard</Link>
@@ -127,18 +137,18 @@ export default function BandejaPage() {
           </div>
         </nav>
 
-        <header className="pt-6 pb-4 md:pt-0 md:border-b border-red-900 md:pb-6 flex justify-between items-center mb-8">
+        {/* Header desktop */}
+        <header className="hidden md:flex pt-0 pb-6 border-b border-red-900 justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl md:text-4xl font-black text-white">Revisión de <span className="text-red-600">Prospectos</span></h1>
-            <p className="text-gray-400 text-[10px] md:text-base tracking-widest uppercase">Bandeja de Entrada</p>
-          </div>
-          <div className="md:hidden">
-            <UserNav />
+            <h1 className="text-4xl font-black text-white">Revisión de <span className="text-red-600">Prospectos</span></h1>
+            <p className="text-gray-400 text-base tracking-widest uppercase">Bandeja de Entrada</p>
           </div>
         </header>
 
         {loading ? (
-          <div className="text-yellow-500 text-center py-10 font-bold">Cargando expedientes...</div>
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <LumaSpin />
+          </div>
         ) : solicitudes.length === 0 ? (
           <div className="bg-gray-900 border border-gray-800 p-10 rounded-xl text-center text-gray-500">
             No hay solicitudes pendientes por revisar.
