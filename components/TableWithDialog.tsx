@@ -483,10 +483,21 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     </html>
   `;
   
-  const ventanaImpresion = window.open('', '_blank');
-  ventanaImpresion?.document.write(contenido);
-  ventanaImpresion?.document.close();
-  ventanaImpresion?.print();
+  const htmlCompleto = contenido + `
+    <script>
+      window.addEventListener('load', function() {
+        setTimeout(function() { window.print(); }, 300);
+      });
+    </script>
+  `;
+  const blob = new Blob([htmlCompleto], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  if (!w) {
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
 
   const filteredClientes = clientes.filter((cliente) => {

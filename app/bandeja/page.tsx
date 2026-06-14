@@ -171,38 +171,54 @@ export default function BandejaPage() {
 
         {/* Modal de Aprobación */}
         {selectedSolicitud && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-            <div className="bg-gray-950 border border-red-900 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row my-8">
-              
-              {/* Lado Izquierdo: Fotos y Datos */}
-              <div className="w-full md:w-1/2 p-6 border-r border-gray-800 bg-gray-900 overflow-y-auto max-h-[80vh]">
-                <h2 className="text-2xl font-bold text-white mb-4 border-l-4 border-yellow-500 pl-2">Expediente Digital</h2>
-                
-                <div className="mb-4">
-                  <p className="text-gray-400 text-xs uppercase mb-1">Fotografía INE</p>
-                  <div className="w-full h-48 bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
-                    <img src={selectedSolicitud.ine_url} alt="INE" className="w-full h-full object-cover hover:object-contain" />
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <p className="text-gray-400 text-xs uppercase mb-1">Comprobante de Domicilio</p>
-                  <div className="w-full h-48 bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
-                    <img src={selectedSolicitud.comprobante_url} alt="Comprobante" className="w-full h-full object-cover hover:object-contain" />
-                  </div>
-                </div>
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/90 backdrop-blur-sm">
+            <div className="bg-gray-950 border border-red-900 w-full max-w-4xl rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[95vh]">
 
-                <div className="bg-gray-950 p-4 rounded-lg border border-gray-800">
-                  <p className="text-white font-bold">{selectedSolicitud.nombre_prospecto}</p>
-                  <p className="text-yellow-500 text-sm">Ingreso reportado: ${selectedSolicitud.ingreso_mensual}</p>
+              {/* Handle bar móvil */}
+              <div className="flex justify-center pt-3 pb-1 sm:hidden">
+                <div className="w-10 h-1 bg-gray-700 rounded-full" />
+              </div>
+
+              <div className="flex flex-col md:flex-row flex-1 min-h-0">
+              {/* Lado Izquierdo: Fotos y Datos */}
+              <div className="w-full md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-gray-800 bg-gray-900 overflow-y-auto md:max-h-[85vh]">
+                <h2 className="text-lg font-bold text-white mb-3 border-l-4 border-yellow-500 pl-2">Expediente Digital</h2>
+
+                {selectedSolicitud.ine_url && (
+                  <div className="mb-3">
+                    <p className="text-gray-400 text-[10px] uppercase mb-1 tracking-wide">Fotografía INE</p>
+                    <a href={selectedSolicitud.ine_url} target="_blank" rel="noopener noreferrer"
+                      className="block w-full bg-gray-800 rounded-xl overflow-hidden border border-gray-700 active:opacity-80">
+                      <img src={selectedSolicitud.ine_url} alt="INE"
+                        className="w-full max-h-52 object-contain" />
+                    </a>
+                    <p className="text-gray-600 text-[10px] mt-1 text-center">Toca para ver completo</p>
+                  </div>
+                )}
+
+                {selectedSolicitud.comprobante_url && (
+                  <div className="mb-3">
+                    <p className="text-gray-400 text-[10px] uppercase mb-1 tracking-wide">Comprobante de Domicilio</p>
+                    <a href={selectedSolicitud.comprobante_url} target="_blank" rel="noopener noreferrer"
+                      className="block w-full bg-gray-800 rounded-xl overflow-hidden border border-gray-700 active:opacity-80">
+                      <img src={selectedSolicitud.comprobante_url} alt="Comprobante"
+                        className="w-full max-h-52 object-contain" />
+                    </a>
+                    <p className="text-gray-600 text-[10px] mt-1 text-center">Toca para ver completo</p>
+                  </div>
+                )}
+
+                <div className="bg-gray-950 p-3 rounded-xl border border-gray-800">
+                  <p className="text-white font-bold text-sm">{selectedSolicitud.nombre_prospecto}</p>
+                  <p className="text-yellow-500 text-xs mt-0.5">Ingreso reportado: ${selectedSolicitud.ingreso_mensual}</p>
                 </div>
               </div>
 
               {/* Lado Derecho: Formulario de Aprobación */}
-              <div className="w-full md:w-1/2 p-6 flex flex-col justify-center">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-bold text-white">Configurar Crédito</h3>
-                  <button onClick={() => setSelectedSolicitud(null)} className="text-gray-500 hover:text-white text-2xl">&times;</button>
+              <div className="w-full md:w-1/2 p-4 flex flex-col overflow-y-auto md:max-h-[85vh]">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-base font-bold text-white">Configurar Crédito</h3>
+                  <button onClick={() => setSelectedSolicitud(null)} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
                 </div>
 
                 <form onSubmit={handleAprobar} className="flex flex-col gap-4">
@@ -261,7 +277,7 @@ export default function BandejaPage() {
                   </div>
                 </form>
               </div>
-
+              </div>{/* flex row */}
             </div>
           </div>
         )}

@@ -60,8 +60,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div 
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden w-full bg-cover bg-center bg-no-repeat"
+    <div
+      className="h-screen flex flex-col items-center justify-center relative overflow-hidden w-full bg-cover bg-center bg-no-repeat bg-fixed"
       style={{ backgroundImage: "url('/fondo.jpg')" }}
     >
       <div className="absolute inset-0 bg-black/60 z-0 backdrop-blur-[2px]"></div>

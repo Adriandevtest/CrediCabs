@@ -150,11 +150,14 @@ export default function CobradorPage() {
             _multiCredito: tieneMultiples,
             _creditoNumero: idx + 1,
           };
-          const pagoHoy = (credito.pagos_diarios || []).find(
-            (p: any) => p.fecha_esperada === today && p.pagado === true
+          // Pagos vencidos (fecha <= hoy)
+          const vencidos = (credito.pagos_diarios || []).filter(
+            (p: any) => p.fecha_esperada <= today
           );
-          if (pagoHoy) pagadosHoy.push(entry);
-          else pendientes.push(entry);
+          // Si todos los vencidos están pagados → completado hoy
+          const alDia = vencidos.length > 0 && vencidos.every((p: any) => p.pagado);
+          if (alDia) pagadosHoy.push(entry);
+          else if (vencidos.some((p: any) => !p.pagado)) pendientes.push(entry);
         });
       });
 

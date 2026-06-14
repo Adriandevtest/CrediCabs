@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Páginas donde no se muestra ningún nav
@@ -23,14 +23,39 @@ const COBRADOR_TABS = [
 export default function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isVisible, setIsVisible] = useState(true);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [activeHash, setActiveHash] = useState('');
+  const lastScrollY = useRef(0);
+  const ticking = useRef(false);
 
   // Ocultar cuando el teclado virtual abre
   useEffect(() => {
-    const handleResize = () => setIsVisible(window.innerHeight >= 400);
+    const handleResize = () => setKeyboardOpen(window.innerHeight < 400);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Ocultar al bajar, mostrar al subir
+  useEffect(() => {
+    const handleScroll = () => {
+      if (ticking.current) return;
+      ticking.current = true;
+      requestAnimationFrame(() => {
+        const currentY = window.scrollY;
+        if (currentY < 60) {
+          setHidden(false);
+        } else if (currentY > lastScrollY.current + 8) {
+          setHidden(true);
+        } else if (currentY < lastScrollY.current - 8) {
+          setHidden(false);
+        }
+        lastScrollY.current = currentY;
+        ticking.current = false;
+      });
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Seguir el hash actual para el nav del cobrador
@@ -41,12 +66,12 @@ export default function MobileNav() {
     return () => window.removeEventListener('hashchange', readHash);
   }, [pathname]);
 
-  if (OCULTAR_EN.includes(pathname) || !isVisible) return null;
+  if (OCULTAR_EN.includes(pathname) || keyboardOpen) return null;
 
   // ── NAV ASESOR ────────────────────────────────────────────
   if (pathname === '/asesor') {
     return (
-      <nav className="fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100">
+      <nav className={`fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-24' : 'translate-y-0'}`}>
         {ASESOR_TABS.map(({ hash, label, icon }) => {
           const isActive = activeHash === hash || (hash === '' && (activeHash === '' || activeHash === '#nueva'));
           return (
@@ -70,7 +95,7 @@ export default function MobileNav() {
   // ── NAV COBRADOR ──────────────────────────────────────────
   if (pathname === '/cobrador') {
     return (
-      <nav className="fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100">
+      <nav className={`fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-24' : 'translate-y-0'}`}>
         {COBRADOR_TABS.map(({ hash, label, icon }) => {
           const isActive = activeHash === hash || (hash === '' && (activeHash === '' || activeHash === '#ruta'));
           return (
@@ -104,7 +129,7 @@ export default function MobileNav() {
   };
 
   return (
-    <nav className="fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-[#ca1444] rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-white/10">
+    <nav className={`fixed bottom-4 left-4 right-4 md:hidden z-[100] h-16 bg-[#ca1444] rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-white/10 transition-transform duration-300 ${hidden ? 'translate-y-24' : 'translate-y-0'}`}>
       <Link href="/" className={getIconClass('/')} title="Inicio">
         <i className="fa-solid fa-house text-2xl" />
       </Link>

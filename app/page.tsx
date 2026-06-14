@@ -7,6 +7,7 @@ import ClientTable from '../components/ClientTable';
 import ActionModal from '../components/ActionModal';
 import { supabase } from '../lib/supabase';
 import UserNav from '../components/UserNav';
+import { LumaSpin } from '../components/luma-spin';
 
 export default function Home() {
   const [cobradores, setCobradores] = useState<any[]>([]);
@@ -141,8 +142,9 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        Cargando acceso administrativo...
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
+        <LumaSpin />
+        <p className="text-gray-500 text-sm">Cargando...</p>
       </div>
     );
   }
@@ -151,6 +153,22 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-950 pb-20">
+
+      {/* ── HEADER MÓVIL sticky ── */}
+      <header className="md:hidden sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-4 py-3 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-black text-white leading-tight">Credi <span className="text-red-600">Cab's</span></h1>
+          <p className="text-gray-500 text-[9px] uppercase tracking-widest">Admin Central</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full"
+          >+ Nuevo</button>
+          <UserNav />
+        </div>
+      </header>
+
       <div className="max-w-7xl mx-auto px-4 md:px-8">
 
         {/* Nav escritorio */}
@@ -173,13 +191,12 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* Header */}
-        <header className="pt-6 pb-4 md:pt-0 md:border-b border-red-900 md:pb-6 flex justify-between items-center">
+        {/* Header escritorio */}
+        <header className="hidden md:flex pt-0 pb-6 border-b border-red-900 justify-between items-center">
           <div>
-            <h1 className="text-2xl md:text-4xl font-black text-white">Credi <span className="text-red-600">Cab's</span></h1>
-            <p className="text-gray-400 text-[10px] md:text-base tracking-widest uppercase">Admin Central</p>
+            <h1 className="text-4xl font-black text-white">Credi <span className="text-red-600">Cab's</span></h1>
+            <p className="text-gray-400 text-base tracking-widest uppercase">Admin Central</p>
           </div>
-          <div className="md:hidden"><UserNav /></div>
         </header>
 
         {/* Métricas principales */}
