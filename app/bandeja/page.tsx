@@ -14,7 +14,7 @@ export default function BandejaPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedSolicitud, setSelectedSolicitud] = useState<any | null>(null);
-  const [formData, setFormData] = useState({ monto: 5000, semanas: 28, tasa_interes: 0, cobrador_id: '' });
+  const [formData, setFormData] = useState({ monto: 5000, semanas: 28, tasa_interes: 40, cobrador_id: '' });
   const [procesando, setProcesando] = useState(false);
   const [mobileTab, setMobileTab] = useState<'expediente' | 'configurar'>('expediente');
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
@@ -152,7 +152,7 @@ export default function BandejaPage() {
                 <button
                   onClick={() => {
                     setSelectedSolicitud(sol);
-                    setFormData({ monto: 5000, semanas: 28, tasa_interes: 0, cobrador_id: '' });
+                    setFormData({ monto: 5000, semanas: 28, tasa_interes: 40, cobrador_id: '' });
                   }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded font-bold transition-colors border border-gray-700"
                 >

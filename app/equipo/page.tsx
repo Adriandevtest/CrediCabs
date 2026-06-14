@@ -22,6 +22,7 @@ export default function EquipoPage() {
   const [resetting, setResetting] = useState(false);
   const [despidiendo, setDespidiendo] = useState(false);
   const [clientesAsignados, setClientesAsignados] = useState<any[]>([]);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
 
   const fetchEquipo = async () => {
     setLoading(true);
@@ -69,6 +70,8 @@ export default function EquipoPage() {
   const abrirDetalles = async (miembro: any) => {
     setSelectedMember(miembro);
     setIsDetailsOpen(true);
+    setShowPasswordReset(false);
+    setNewPassword('');
 
     // Si es cobrador, traer sus clientes
     if (miembro.rol === 'cobrador') {
@@ -217,36 +220,51 @@ export default function EquipoPage() {
                 </div>
               </div>
 
-              {/* Restablecer Contraseña */}
-              <div className="bg-red-950/20 p-4 rounded-xl border border-red-900/30">
-                <h4 className="text-red-500 font-bold text-sm mb-3">Restablecer Contraseña</h4>
-                <input 
-                  type="text" 
-                  placeholder="Nueva contraseña..." 
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="bg-gray-900 border border-red-900/50 rounded-lg p-3 text-sm w-full mb-3 text-white"
-                />
-                <button 
-                  onClick={async () => {
-                    setResetting(true);
-                    try {
-                      const res = await fetch('/api/admin/reset-password', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: selectedMember.id, newPassword })
-                      });
-                      if (!res.ok) throw new Error('Error al actualizar');
-                      alert('✅ Contraseña actualizada correctamente.');
-                      setNewPassword('');
-                      setIsDetailsOpen(false);
-                    } catch (e: any) { alert(e.message); } finally { setResetting(false); }
-                  }}
-                  disabled={resetting || !newPassword}
-                  className="w-full bg-red-600 py-3 rounded-lg text-xs font-bold uppercase hover:bg-red-700 disabled:opacity-50"
+              {/* Restablecer Contraseña — colapsada por defecto */}
+              <div className="bg-red-950/20 rounded-xl border border-red-900/30 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => { setShowPasswordReset(!showPasswordReset); setNewPassword(''); }}
+                  className="w-full flex justify-between items-center px-4 py-3 text-left"
                 >
-                  {resetting ? 'Actualizando...' : 'Confirmar Nueva Contraseña'}
+                  <span className="text-red-500 font-bold text-sm">Restablecer Contraseña</span>
+                  <i className={`fa-solid fa-chevron-${showPasswordReset ? 'up' : 'down'} text-red-700 text-xs`} />
                 </button>
+
+                {showPasswordReset && (
+                  <div className="px-4 pb-4 flex flex-col gap-3">
+                    <input
+                      type="password"
+                      placeholder="Nueva contraseña..."
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="bg-gray-900 border border-red-900/50 rounded-lg p-3 text-sm w-full text-white focus:outline-none focus:border-red-500"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setResetting(true);
+                        try {
+                          const res = await fetch('/api/admin/reset-password', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: selectedMember.id, newPassword }),
+                          });
+                          if (!res.ok) throw new Error('Error al actualizar');
+                          alert('✅ Contraseña actualizada correctamente.');
+                          setNewPassword('');
+                          setShowPasswordReset(false);
+                          setIsDetailsOpen(false);
+                        } catch (e: any) { alert(e.message); } finally { setResetting(false); }
+                      }}
+                      disabled={resetting || !newPassword}
+                      className="w-full bg-red-600 py-3 rounded-lg text-xs font-bold uppercase hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {resetting ? 'Actualizando...' : 'Confirmar Contraseña'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Clientes Asignados (solo para cobradores) */}

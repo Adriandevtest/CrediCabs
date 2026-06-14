@@ -28,6 +28,7 @@ export default function CobradorPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [nombreCobrador, setNombreCobrador] = useState('');
   const [telefonoCobrador, setTelefonoCobrador] = useState('');
+  const [fotoCobrador, setFotoCobrador] = useState('');
   const [gpsEstado, setGpsEstado] = useState<GpsEstado>('inactivo');
 
   // ── Historial ──
@@ -108,13 +109,14 @@ export default function CobradorPage() {
 
       const { data: perfil } = await supabase
         .from('profiles')
-        .select('nombre_completo, telefono')
+        .select('nombre_completo, telefono, foto_url, avatar_url')
         .eq('id', user.id)
         .single();
 
       if (perfil) {
         setNombreCobrador(perfil.nombre_completo?.split(' ')[0] || '');
         setTelefonoCobrador(perfil.telefono || '');
+        setFotoCobrador(perfil.foto_url || perfil.avatar_url || '');
       }
 
       const { data, error } = await supabase
@@ -124,7 +126,7 @@ export default function CobradorPage() {
           profiles (nombre_completo, telefono),
           creditos (
             id, monto_diario, estado, monto_total, interes_total, tasa_interes_porcentaje,
-            pagos_diarios (id, pagado, fecha_esperada)
+            pagos_diarios (id, pagado, fecha_esperada, numero_dia)
           )
         `)
         .eq('cobrador_asignado_id', user.id)
@@ -362,6 +364,13 @@ export default function CobradorPage() {
                         const isProcessing = procesandoPago === cliente._creditoId;
                         const atrasado = credito?.estado === 'atrasado';
 
+                        const pagosOrdenados = [...(credito.pagos_diarios || [])].sort(
+                          (a: any, b: any) => a.numero_dia - b.numero_dia
+                        );
+                        const nextPago = pagosOrdenados.find((p: any) => !p.pagado);
+                        const numeroPago = nextPago?.numero_dia;
+                        const totalPagos = pagosOrdenados.length;
+
                         return (
                           <div
                             key={cliente._entryKey}
@@ -369,11 +378,16 @@ export default function CobradorPage() {
                           >
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-xs text-gray-400 font-mono">#{cliente.numero_cliente}</span>
                                   {cliente._multiCredito && (
                                     <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">
                                       Crédito {cliente._creditoNumero}
+                                    </span>
+                                  )}
+                                  {numeroPago && (
+                                    <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
+                                      Pago {numeroPago}/{totalPagos}
                                     </span>
                                   )}
                                 </div>
@@ -617,9 +631,17 @@ export default function CobradorPage() {
             {/* Avatar + datos */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-xl shrink-0">
-                  {(nombreCobrador || 'C')[0].toUpperCase()}
-                </div>
+                {fotoCobrador ? (
+                  <img
+                    src={fotoCobrador}
+                    alt={nombreCobrador}
+                    className="w-14 h-14 rounded-full object-cover border-2 border-red-500 shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-xl shrink-0">
+                    {(nombreCobrador || 'C')[0].toUpperCase()}
+                  </div>
+                )}
                 <div>
                   <p className="text-gray-900 font-bold text-base leading-tight">{nombreCobrador || 'Cobrador'}</p>
                   <span className="text-xs text-white bg-red-600 px-2 py-0.5 rounded-full font-medium">Cobrador</span>

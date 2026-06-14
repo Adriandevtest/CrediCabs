@@ -21,6 +21,7 @@ export default function AsesorPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [nombreAsesor, setNombreAsesor] = useState('');
   const [telefonoAsesor, setTelefonoAsesor] = useState('');
+  const [fotoAsesor, setFotoAsesor] = useState('');
   const [gpsEstado, setGpsEstado] = useState<GpsEstado>('inactivo');
 
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
@@ -49,13 +50,14 @@ export default function AsesorPage() {
 
       const { data: perfil } = await supabase
         .from('profiles')
-        .select('nombre_completo, telefono')
+        .select('nombre_completo, telefono, foto_url, avatar_url')
         .eq('id', data.user.id)
         .single();
 
       if (perfil) {
         setNombreAsesor(perfil.nombre_completo || '');
         setTelefonoAsesor(perfil.telefono || '');
+        setFotoAsesor(perfil.foto_url || perfil.avatar_url || '');
       }
     });
   }, []);
@@ -207,9 +209,17 @@ export default function AsesorPage() {
             {/* Datos */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-yellow-500 rounded-full flex items-center justify-center text-gray-950 font-black text-xl shrink-0">
-                  {(nombreAsesor || 'A')[0].toUpperCase()}
-                </div>
+                {fotoAsesor ? (
+                  <img
+                    src={fotoAsesor}
+                    alt={nombreAsesor}
+                    className="w-14 h-14 rounded-full object-cover border-2 border-yellow-500 shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 bg-yellow-500 rounded-full flex items-center justify-center text-gray-950 font-black text-xl shrink-0">
+                    {(nombreAsesor || 'A')[0].toUpperCase()}
+                  </div>
+                )}
                 <div>
                   <p className="text-white font-bold text-base leading-tight">{nombreAsesor || 'Asesor'}</p>
                   <span className="text-xs text-gray-950 bg-yellow-500 px-2 py-0.5 rounded-full font-bold">Asesor</span>
