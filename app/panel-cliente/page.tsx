@@ -1,286 +1,337 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
-import { AnimatedTabs } from '@/components/ui/animated-tabs';
-import { InterestBreakdown } from '@/components/InterestBreakdown';
 
 export default function PanelCliente() {
   const [datos, setDatos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pagoReciente, setPagoReciente] = useState(false);
+  const [tabActivo, setTabActivo] = useState(0);
   const router = useRouter();
+
+  const cargarDatos = useCallback(async (id: string) => {
+    try {
+      const { data: clienteData, error: clienteError } = await supabase
+        .from('clientes').select('*').eq('id', id).single();
+      if (clienteError) throw clienteError;
+
+      const { data: creditosData, error: creditosError } = await supabase
+        .from('creditos').select('*, pagos_diarios(*)').eq('cliente_id', id);
+      if (creditosError) throw creditosError;
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles').select('nombre_completo').eq('id', id).single();
+      if (profileError) throw profileError;
+
+      let cobradorData = null;
+      if (clienteData?.cobrador_asignado_id) {
+        const { data: cob } = await supabase
+          .from('profiles')
+          .select('nombre_completo, telefono')
+          .eq('id', clienteData.cobrador_asignado_id)
+          .single();
+        cobradorData = cob;
+      }
+
+      setDatos({ ...clienteData, creditos: creditosData || [], profiles: profileData, cobrador: cobradorData });
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const id = localStorage.getItem('cliente_id');
     if (!id) { router.push('/login'); return; }
+    cargarDatos(id);
 
-    const cargarDatos = async () => {
-      try {
-        // Traer datos del cliente con sus créditos
-        const { data: clienteData, error: clienteError } = await supabase
-          .from('clientes')
-          .select('*')
-          .eq('id', id)
-          .single();
+    const channel = supabase
+      .channel(`cliente-pagos-rt-${id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
+        setPagoReciente(true);
+        setTimeout(() => setPagoReciente(false), 4000);
+        cargarDatos(id);
+      })
+      .subscribe();
 
-        if (clienteError) throw clienteError;
-        if (!clienteData) throw new Error('Cliente no encontrado');
-
-        // Traer créditos del cliente
-        const { data: creditosData, error: creditosError } = await supabase
-          .from('creditos')
-          .select('*')
-          .eq('cliente_id', id);
-
-        if (creditosError) throw creditosError;
-
-        // Traer perfil del cliente
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('nombre_completo')
-          .eq('id', id)
-          .single();
-
-        if (profileError) throw profileError;
-
-        // Combinar datos
-        const datosCompletos = {
-          ...clienteData,
-          creditos: creditosData || [],
-          profiles: profileData
-        };
-
-        setDatos(datosCompletos);
-      } catch (error) {
-        console.error('Error cargando datos:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    cargarDatos();
-  }, [router]);
+    return () => { supabase.removeChannel(channel); };
+  }, [router, cargarDatos]);
 
   const cerrarSesion = () => {
     localStorage.removeItem('cliente_id');
     router.push('/login');
   };
 
-  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-yellow-500">Cargando...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 text-sm">Cargando tu cuenta...</p>
+      </div>
+    );
+  }
 
-  const pestañasCredito = datos?.creditos?.map((credito: any, index: number) => {
-    const plazoSemanas = credito.semanas_autorizadas || credito.plazo_semanas || 12;
-    const totalDias = plazoSemanas * 5;
-    const pagosRealizados = credito.pagos || [];
-    const fechaInicio = new Date(credito.fecha_inicio || new Date());
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+  const creditos = datos?.creditos || [];
+  const credito = creditos[tabActivo] || creditos[0];
 
-    // Calcular capital e interés por día
-    const capitalPorDia = credito.monto_total / totalDias;
-    const interesPorDia = (credito.interes_total || 0) / totalDias;
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
 
-    // Calcular progreso en días
-    const diasPagados = pagosRealizados.length;
-    const diasPendientes = totalDias - diasPagados;
-    const porcentajePagado = (diasPagados / totalDias) * 100;
+  const cronograma = credito
+    ? [...(credito.pagos_diarios || [])]
+        .sort((a: any, b: any) => a.numero_dia - b.numero_dia)
+        .map((pago: any, i: number) => {
+          const fechaPago = new Date(pago.fecha_esperada + 'T00:00:00');
+          fechaPago.setHours(0, 0, 0, 0);
+          return {
+            numero: i + 1,
+            fecha: fechaPago.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }),
+            monto: credito.monto_diario,
+            pagado: !!pago.pagado,
+            atrasado: !pago.pagado && fechaPago < hoy,
+          };
+        })
+    : [];
 
-    const cronograma = Array.from({ length: totalDias }, (_, i) => {
-      const numeroDia = i + 1;
-      let fechaActual = new Date(fechaInicio);
-      let diasAgregados = 0;
+  const pagosPagados = cronograma.filter(p => p.pagado).length;
+  const pagosPendientes = cronograma.length - pagosPagados;
+  const porcentaje = cronograma.length > 0 ? Math.round((pagosPagados / cronograma.length) * 100) : 0;
+  const pagosAtrasados = cronograma.filter(p => p.atrasado);
+  const proximoPendiente = cronograma.find(p => !p.pagado);
+  const totalAPagar = credito ? credito.monto_total + (credito.interes_total || 0) : 0;
 
-      // Avanzar solo días hábiles
-      while (diasAgregados < numeroDia) {
-        const diaSemana = fechaActual.getDay();
-        if (diaSemana !== 0 && diaSemana !== 6) {
-          diasAgregados++;
-          if (diasAgregados === numeroDia) break;
-        }
-        fechaActual.setDate(fechaActual.getDate() + 1);
-      }
+  return (
+    <main className="min-h-screen bg-gray-950 flex flex-col">
 
-      const pagoHecho = pagosRealizados.find((p: any) => p.numero_dia === numeroDia);
-      const fechaPago = new Date(fechaActual);
-      fechaPago.setHours(0, 0, 0, 0);
-      const estAtrasado = !pagoHecho && fechaPago < hoy;
+      {/* Header sticky */}
+      <header className="sticky top-0 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60 px-4 py-3">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">Mi Crédito</p>
+            <h1 className="text-base font-black text-white leading-tight">
+              {datos?.profiles?.nombre_completo || 'Cliente'}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            {pagoReciente && (
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-900/40 border border-emerald-800/50 px-2 py-1 rounded-full">
+                ✓ Pago registrado
+              </span>
+            )}
+            <button
+              onClick={cerrarSesion}
+              className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
+        </div>
 
-      return {
-        dia: numeroDia,
-        semana: Math.ceil(numeroDia / 5),
-        fecha: fechaActual.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }),
-        monto: pagoHecho?.monto || credito.monto_diario,
-        capital: capitalPorDia,
-        interes: interesPorDia,
-        pagado: !!pagoHecho,
-        atrasado: estAtrasado,
-        fechaCompleta: fechaPago
-      };
-    });
+        {/* Tabs si hay varios créditos */}
+        {creditos.length > 1 && (
+          <div className="flex gap-1 mt-2 -mb-px">
+            {creditos.map((_: any, i: number) => (
+              <button
+                key={i}
+                onClick={() => setTabActivo(i)}
+                className={`px-3 py-1 text-xs font-bold rounded-t-lg border-b-2 transition-colors ${
+                  tabActivo === i
+                    ? 'border-yellow-500 text-yellow-400'
+                    : 'border-transparent text-gray-500'
+                }`}
+              >
+                Crédito {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
+      </header>
 
-    // Filtrar pagos atrasados
-    const pagosAtrasados = cronograma.filter(p => p.atrasado);
+      {creditos.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-4xl">📋</p>
+          <p className="text-white font-bold">Sin créditos activos</p>
+          <p className="text-gray-500 text-sm">No tienes ningún crédito registrado.</p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto pb-10">
+          <div className="px-4 pt-4 space-y-3">
 
-    return {
-      id: `credito-${index}`,
-      label: `Crédito #${index + 1}`,
-      content: (
-        <div className="space-y-4 w-full">
-          {/* ALERTA DE PAGOS ATRASADOS */}
-          {pagosAtrasados.length > 0 && (
-            <div className="bg-red-950/50 border-2 border-red-600 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-exclamation-triangle text-red-500 text-xl"></i>
-                <h3 className="text-red-400 font-black text-lg">⚠️ Pagos Atrasados</h3>
-              </div>
-              <div className="space-y-2">
-                {pagosAtrasados.map((pago) => (
-                  <div key={pago.dia} className="bg-red-900/30 p-3 rounded-lg border border-red-800">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-red-300 font-bold">Día {pago.dia}</p>
-                        <p className="text-red-400 text-sm">{pago.fecha}</p>
-                      </div>
-                      <p className="text-red-500 font-black text-lg">${pago.monto.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+            {/* Alerta de pagos atrasados */}
+            {pagosAtrasados.length > 0 && (
+              <div className="bg-red-950/60 border border-red-700/50 rounded-2xl p-4 space-y-2">
+                <p className="text-red-400 font-black text-sm">⚠️ {pagosAtrasados.length} pago{pagosAtrasados.length > 1 ? 's' : ''} atrasado{pagosAtrasados.length > 1 ? 's' : ''}</p>
+                {pagosAtrasados.slice(0, 3).map(p => (
+                  <div key={p.numero} className="flex justify-between items-center bg-red-900/30 rounded-lg px-3 py-2">
+                    <div>
+                      <p className="text-red-300 text-xs font-bold">Pago {p.numero}</p>
+                      <p className="text-red-400 text-[10px]">{p.fecha}</p>
                     </div>
+                    <p className="text-red-400 font-black text-sm">${Math.round(p.monto).toLocaleString('es-MX')}</p>
                   </div>
                 ))}
+                {pagosAtrasados.length > 3 && (
+                  <p className="text-red-500 text-xs text-center">+{pagosAtrasados.length - 3} más atrasados</p>
+                )}
+                <p className="text-red-300 text-xs font-bold pt-1 border-t border-red-800/40">
+                  Total atrasado: ${pagosAtrasados.reduce((s, p) => s + p.monto, 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                </p>
               </div>
-              <p className="text-red-300 text-sm font-bold">
-                Total atrasado: ${pagosAtrasados.reduce((sum, p) => sum + p.monto, 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}
-              </p>
-            </div>
-          )}
+            )}
 
-          {/* Card Principal del Crédito */}
-          <div className="bg-gradient-to-br from-gray-900 to-gray-950 rounded-2xl border border-red-900/30 p-6 shadow-xl space-y-4">
-
-            {/* Header del Card */}
-            <div className="border-b border-gray-800 pb-4">
-              <div className="flex justify-between items-start mb-2">
+            {/* Resumen del crédito */}
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4">
+              <div className="flex justify-between items-start mb-3">
                 <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-widest">Crédito Activo</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">Crédito</p>
                   <p className="text-white font-black text-2xl">${credito.monto_total.toLocaleString('es-MX')}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-gray-400 text-xs uppercase tracking-widest">Cuota Diaria</p>
-                  <p className="text-yellow-500 font-black text-2xl">${credito.monto_diario.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">Cuota diaria</p>
+                  <p className="text-yellow-400 font-black text-2xl">${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-gray-800/60 rounded-xl p-2.5">
+                  <p className="text-gray-500 uppercase mb-0.5">Esquema</p>
+                  <p className="text-white font-bold">{credito.semanas_autorizadas} pagos diarios</p>
+                </div>
+                <div className="bg-gray-800/60 rounded-xl p-2.5">
+                  <p className="text-gray-500 uppercase mb-0.5">Total a pagar</p>
+                  <p className="text-white font-bold">${totalAPagar.toLocaleString('es-MX')}</p>
                 </div>
               </div>
             </div>
 
-            {/* Desglose de Capital */}
-            <div className="bg-gray-800/50 p-3 rounded-lg border border-gray-700 text-center">
-              <p className="text-gray-400 text-[10px] uppercase font-bold">Monto</p>
-              <p className="text-white font-black text-2xl">${credito.monto_total.toLocaleString('es-MX')}</p>
-            </div>
-
-            {/* Información General */}
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-gray-800/30 p-3 rounded-lg">
-                <p className="text-gray-500 text-xs uppercase mb-1">Plazo Total</p>
-                <p className="text-white font-bold">{plazoSemanas} semanas ({totalDias} días)</p>
-              </div>
-              <div className="bg-gray-800/30 p-3 rounded-lg">
-                <p className="text-gray-500 text-xs uppercase mb-1">Total a Pagar</p>
-                <p className="text-white font-bold">${(credito.monto_total + (credito.interes_total || 0)).toLocaleString('es-MX')}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Progreso Visual */}
-          <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-white font-bold text-lg">Progreso de Pago</h3>
-              <span className="text-yellow-500 font-black text-xl">{Math.round(porcentajePagado)}%</span>
-            </div>
-
-            {/* Barra de Progreso */}
-            <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full transition-all duration-500"
-                style={{ width: `${porcentajePagado}%` }}
-              ></div>
-            </div>
-
-            {/* Estadísticas */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-emerald-900/20 border border-emerald-900/50 rounded-lg p-4 text-center">
-                <p className="text-emerald-400 text-sm font-bold uppercase">Días Pagados</p>
-                <p className="text-emerald-300 font-black text-3xl">{diasPagados}</p>
-              </div>
-              <div className="bg-red-900/20 border border-red-900/50 rounded-lg p-4 text-center">
-                <p className="text-red-400 text-sm font-bold uppercase">Días Pendientes</p>
-                <p className="text-red-300 font-black text-3xl">{diasPendientes}</p>
-              </div>
-            </div>
-
-            {/* Próximo Pago */}
-            {diasPendientes > 0 && (
-              <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4">
-                <p className="text-blue-400 text-xs uppercase font-bold mb-1">Próximo Pago Vencido</p>
-                <p className="text-white font-bold text-lg">
-                  ${cronograma[diasPagados]?.monto.toLocaleString('es-MX', { maximumFractionDigits: 0 }) || credito.monto_diario.toLocaleString('es-MX')}
-                </p>
-                <p className="text-gray-400 text-xs mt-1">Día {diasPagados + 1}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Lista de Días */}
-          <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
-            <div className="p-4 border-b border-gray-800">
-              <h3 className="text-white font-bold">Calendario de Pagos</h3>
-            </div>
-            <div className="max-h-[400px] overflow-y-auto">
-              {cronograma.map((item) => (
-                <div key={item.dia} className={`flex justify-between items-center p-4 border-b border-gray-800 last:border-0 transition-colors ${item.pagado ? 'bg-emerald-950/20' : item.atrasado ? 'bg-red-950/20' : 'hover:bg-gray-800/50'}`}>
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 ${item.pagado ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400' : item.atrasado ? 'border-red-500 bg-red-500/20 text-red-400' : 'border-gray-600 text-gray-400'}`}>
-                      {item.pagado ? <i className="fa-solid fa-check"></i> : item.atrasado ? <i className="fa-solid fa-exclamation"></i> : item.dia}
+            {/* Tu cobrador */}
+            {datos?.cobrador && (
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4">
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3">Tu Cobrador</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-base shrink-0">
+                      {datos.cobrador.nombre_completo?.[0]?.toUpperCase() || 'C'}
                     </div>
                     <div>
-                      <p className="text-white font-bold">Día {item.dia} (Semana {item.semana})</p>
-                      <p className={`text-xs ${item.atrasado ? 'text-red-400' : 'text-gray-500'}`}>{item.fecha}</p>
+                      <p className="text-white font-bold text-sm leading-tight">{datos.cobrador.nombre_completo}</p>
+                      <p className="text-gray-500 text-[10px]">Cobrador asignado</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-black text-base ${item.pagado ? 'text-emerald-400' : item.atrasado ? 'text-red-400' : 'text-yellow-500'}`}>
-                      ${item.monto.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                  {datos.cobrador.telefono && (
+                    <a
+                      href={`tel:${datos.cobrador.telefono}`}
+                      className="w-9 h-9 bg-green-900/40 border border-green-800/50 rounded-full flex items-center justify-center text-green-400 active:bg-green-900/70 transition-colors"
+                      title={`Llamar a ${datos.cobrador.nombre_completo}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Progreso */}
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <p className="text-white font-bold text-sm">Progreso</p>
+                <span className="text-yellow-400 font-black text-lg">{porcentaje}%</span>
+              </div>
+
+              <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full rounded-full transition-all duration-700"
+                  style={{ width: `${porcentaje}%` }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-emerald-950/40 border border-emerald-900/40 rounded-xl p-3 text-center">
+                  <p className="text-emerald-400 text-[10px] font-bold uppercase">Realizados</p>
+                  <p className="text-emerald-300 font-black text-2xl">{pagosPagados}</p>
+                </div>
+                <div className="bg-red-950/40 border border-red-900/40 rounded-xl p-3 text-center">
+                  <p className="text-red-400 text-[10px] font-bold uppercase">Pendientes</p>
+                  <p className="text-red-300 font-black text-2xl">{pagosPendientes}</p>
+                </div>
+              </div>
+
+              {proximoPendiente && (
+                <div className={`rounded-xl p-3 flex justify-between items-center ${
+                  proximoPendiente.atrasado
+                    ? 'bg-red-950/30 border border-red-800/40'
+                    : 'bg-blue-950/30 border border-blue-800/40'
+                }`}>
+                  <div>
+                    <p className={`text-[10px] uppercase font-bold ${proximoPendiente.atrasado ? 'text-red-400' : 'text-blue-400'}`}>
+                      {proximoPendiente.atrasado ? 'Pago atrasado' : 'Próximo pago'}
+                    </p>
+                    <p className="text-white font-black text-base">${Math.round(proximoPendiente.monto).toLocaleString('es-MX')}</p>
+                    <p className="text-gray-400 text-[10px]">{proximoPendiente.fecha}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                    proximoPendiente.atrasado ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
+                  }`}>
+                    #{proximoPendiente.numero}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Calendario de pagos */}
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+                <p className="text-white font-bold text-sm">Calendario de Pagos</p>
+                <p className="text-gray-500 text-[10px]">{cronograma.length} días hábiles</p>
+              </div>
+              <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-800/60">
+                {cronograma.map((item) => (
+                  <div
+                    key={item.numero}
+                    className={`flex items-center gap-3 px-4 py-2.5 ${
+                      item.pagado ? 'bg-emerald-950/10' : item.atrasado ? 'bg-red-950/15' : ''
+                    }`}
+                  >
+                    {/* Indicador */}
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${
+                      item.pagado
+                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                        : item.atrasado
+                        ? 'border-red-500 bg-red-500/20 text-red-400'
+                        : 'border-gray-700 text-gray-500'
+                    }`}>
+                      {item.pagado ? '✓' : item.atrasado ? '!' : item.numero}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-semibold ${item.pagado ? 'text-emerald-400' : item.atrasado ? 'text-red-300' : 'text-white'}`}>
+                        Pago {item.numero}
+                      </p>
+                      <p className={`text-[10px] ${item.atrasado ? 'text-red-500' : 'text-gray-500'}`}>{item.fecha}</p>
+                    </div>
+
+                    {/* Monto */}
+                    <p className={`text-sm font-black shrink-0 ${
+                      item.pagado ? 'text-emerald-400' : item.atrasado ? 'text-red-400' : 'text-yellow-500'
+                    }`}>
+                      ${Math.round(item.monto).toLocaleString('es-MX')}
                     </p>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+
           </div>
         </div>
-      )
-    };
-  }) || [];
-
-  return (
-    <main className="min-h-screen bg-gray-950 px-4 py-8 flex flex-col items-center">
-      <div className="w-full max-w-lg">
-        {/* Header con espaciado para móvil */}
-        <header className="flex justify-between items-center mb-6 px-2">
-          <div>
-            <p className="text-gray-500 text-[9px] uppercase tracking-widest font-bold">Bienvenido</p>
-            <h1 className="text-xl font-black text-white">{datos?.profiles?.nombre_completo || 'Cliente'}</h1>
-          </div>
-          <button onClick={cerrarSesion} className="text-gray-500 hover:text-red-500 p-2">
-            <i className="fa-solid fa-right-from-bracket"></i>
-          </button>
-        </header>
-
-        <h3 className="text-white font-bold text-sm mb-4 px-2">Resumen de Créditos</h3>
-        
-        {pestañasCredito.length > 0 ? (
-          <div className="w-full">
-            <AnimatedTabs tabs={pestañasCredito} />
-          </div>
-        ) : (
-          <p className="text-gray-500 text-center py-10">No tienes créditos activos.</p>
-        )}
-      </div>
+      )}
     </main>
   );
 }

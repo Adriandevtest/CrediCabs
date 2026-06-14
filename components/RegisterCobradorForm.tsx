@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
 
 export default function RegisterCobradorForm({ onCobradorAdded }: { onCobradorAdded?: () => void }) {
   const [loading, setLoading] = useState(false);
@@ -16,24 +15,24 @@ export default function RegisterCobradorForm({ onCobradorAdded }: { onCobradorAd
     setLoading(true);
 
     try {
-      // Registramos al usuario y le pasamos el rol explícito de 'cobrador'
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: { 
-            nombre_completo: formData.nombre, 
-            rol: 'cobrador' 
-          }
-        }
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          nombre: formData.nombre,
+          telefono: '',
+          rol: 'cobrador'
+        })
       });
 
-      if (error) throw error;
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Error al registrar cobrador');
 
       alert('¡Cobrador añadido exitosamente al equipo!');
-      setFormData({ nombre: '', email: '', password: '' }); // Limpiar formulario
-      
-      // Si pasamos una función para recargar listas, la ejecutamos
+      setFormData({ nombre: '', email: '', password: '' });
+
       if (onCobradorAdded) onCobradorAdded();
 
     } catch (error: any) {

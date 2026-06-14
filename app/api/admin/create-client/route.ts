@@ -6,6 +6,8 @@ export async function POST(request: Request) {
     const {
       nombre_completo,
       email,
+      telefono,
+      direccion,
       monto_total,
       semanas_autorizadas,
       tasa_interes_porcentaje,
@@ -14,6 +16,10 @@ export async function POST(request: Request) {
 
     if (!nombre_completo || !monto_total || !semanas_autorizadas || !cobrador_asignado_id) {
       return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
+    }
+
+    if (semanas_autorizadas !== 28 && semanas_autorizadas !== 37) {
+      return NextResponse.json({ error: 'El esquema debe ser 28 o 37 pagos.' }, { status: 400 });
     }
 
     const supabaseAdmin = createClient(
@@ -47,6 +53,7 @@ export async function POST(request: Request) {
         id: clienteId,
         nombre_completo,
         email: emailAutomatico,
+        telefono: telefono || null,
         rol: 'cliente'
       });
 
@@ -58,15 +65,16 @@ export async function POST(request: Request) {
       .insert({
         id: clienteId,
         numero_cliente: `CLI-${Date.now().toString().slice(-4)}`,
-        cobrador_asignado_id
+        cobrador_asignado_id,
+        direccion: direccion || null
       });
 
     if (clienteError) throw clienteError;
 
-    // 4. Calcular interés y crear crédito
+    // 4. Calcular interés y crear crédito (esquema diario: 28 o 37 pagos de Lunes a Viernes)
     const tasaPorcentaje = parseFloat(tasa_interes_porcentaje?.toString() || '0');
     const interesTotal = monto_total * (tasaPorcentaje / 100);
-    const cuotaDiaria = (monto_total + interesTotal) / (semanas_autorizadas * 5);
+    const cuotaDiaria = (monto_total + interesTotal) / semanas_autorizadas;
 
     const { data: creditoData, error: creditoError } = await supabaseAdmin
       .from('creditos')
@@ -84,24 +92,27 @@ export async function POST(request: Request) {
 
     if (creditoError) throw creditoError;
 
-    // 5. Generar calendario de pagos (Lunes a Viernes)
-    let pagos = [];
+    // 5. Generar calendario diario (un pago por día, solo Lunes-Viernes)
     let fechaActual = new Date();
-    let diasGenerados = 0;
-    const totalDias = semanas_autorizadas * 5;
 
-    while (diasGenerados < totalDias) {
-      const diaSemana = fechaActual.getDay();
-      if (diaSemana !== 0 && diaSemana !== 6) {
-        pagos.push({
-          credito_id: creditoData.id,
-          numero_dia: diasGenerados + 1,
-          fecha_esperada: new Date(fechaActual).toISOString().split('T')[0],
-          pagado: false
-        });
-        diasGenerados++;
-      }
+    // Si hoy es fin de semana, avanzar al lunes
+    while (fechaActual.getDay() === 0 || fechaActual.getDay() === 6) {
       fechaActual.setDate(fechaActual.getDate() + 1);
+    }
+
+    const pagos = [];
+    for (let i = 0; i < semanas_autorizadas; i++) {
+      pagos.push({
+        credito_id: creditoData.id,
+        numero_dia: i + 1,
+        fecha_esperada: new Date(fechaActual).toISOString().split('T')[0],
+        pagado: false
+      });
+      // Avanzar al siguiente día hábil
+      fechaActual.setDate(fechaActual.getDate() + 1);
+      while (fechaActual.getDay() === 0 || fechaActual.getDay() === 6) {
+        fechaActual.setDate(fechaActual.getDate() + 1);
+      }
     }
 
     const { error: pagosError } = await supabaseAdmin

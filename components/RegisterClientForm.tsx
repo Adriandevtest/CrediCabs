@@ -13,9 +13,11 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
+    telefono: '',
+    direccion: '',
     password: 'C' + Math.random().toString(36).slice(-6),
     monto: 5000,
-    semanas: 4,
+    semanas: 28,
     tasa_interes: 0,
     cobrador_id: '',
     fecha_inicio: new Date().toISOString().split('T')[0]
@@ -36,6 +38,8 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
         body: JSON.stringify({
           nombre_completo: formData.nombre,
           email: formData.email,
+          telefono: formData.telefono,
+          direccion: formData.direccion,
           monto_total: formData.monto,
           semanas_autorizadas: formData.semanas,
           tasa_interes_porcentaje: formData.tasa_interes,
@@ -75,13 +79,30 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
         required 
       />
 
-      <input 
-        type="email" 
-        placeholder="Correo electrónico" 
+      <input
+        type="email"
+        placeholder="Correo electrónico (opcional)"
         className="p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none w-full"
         value={formData.email}
         onChange={(e) => setFormData({...formData, email: e.target.value})}
-        required 
+      />
+
+      <input
+        type="tel"
+        placeholder="Teléfono"
+        className="p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none w-full"
+        value={formData.telefono}
+        onChange={(e) => setFormData({...formData, telefono: e.target.value})}
+        required
+      />
+
+      <input
+        type="text"
+        placeholder="Dirección"
+        className="p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none w-full"
+        value={formData.direccion}
+        onChange={(e) => setFormData({...formData, direccion: e.target.value})}
+        required
       />
 
       <div className="flex flex-col md:flex-row gap-4">
@@ -96,14 +117,16 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
           />
         </div>
         <div className="flex flex-col w-full md:w-1/2">
-          <label className="text-gray-400 text-sm mb-1 font-medium">Semanas a Pagar</label>
-          <input
-            type="number"
+          <label className="text-gray-400 text-sm mb-1 font-medium">Esquema de Pago</label>
+          <select
             className="p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 outline-none w-full"
             value={formData.semanas}
             onChange={(e) => setFormData({...formData, semanas: Number(e.target.value)})}
             required
-          />
+          >
+            <option value={28}>28 pagos diarios (~6 semanas)</option>
+            <option value={37}>37 pagos diarios (~8 semanas)</option>
+          </select>
         </div>
       </div>
 

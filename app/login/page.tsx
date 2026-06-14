@@ -79,7 +79,7 @@ export default function LoginPage() {
         <div className="flex flex-col w-full gap-4">
           <div className="w-full flex flex-col gap-3">
             <input
-              placeholder="Correo o ID de Cliente"
+              placeholder="Correo"
               type="text"
               value={email}
               className="w-full px-5 py-3 rounded-xl bg-black/40 text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-white/5"
@@ -87,7 +87,7 @@ export default function LoginPage() {
               onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
             />
             <input
-              placeholder="Contraseña (si aplica)"
+              placeholder="Contraseña"
               type="password"
               value={password}
               className="w-full px-5 py-3 rounded-xl bg-black/40 text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all border border-white/5"

@@ -13,7 +13,7 @@ export default function BandejaPage() {
   
   // Estado para la Modal de Aprobación
   const [selectedSolicitud, setSelectedSolicitud] = useState<any | null>(null);
-  const [formData, setFormData] = useState({ monto: 5000, semanas: 4, tasa_interes: 0, cobrador_id: '' });
+  const [formData, setFormData] = useState({ monto: 5000, semanas: 28, tasa_interes: 0, cobrador_id: '' });
   const [procesando, setProcesando] = useState(false);
 
   useEffect(() => {
@@ -69,6 +69,8 @@ export default function BandejaPage() {
         body: JSON.stringify({
           nombre_completo: selectedSolicitud.nombre_prospecto,
           email: `cliente_${Date.now()}@credicabs.com`,
+          telefono: selectedSolicitud.telefono || '',
+          direccion: selectedSolicitud.direccion || '',
           monto_total: formData.monto,
           semanas_autorizadas: formData.semanas,
           tasa_interes_porcentaje: tasaPorcentaje,
@@ -80,9 +82,6 @@ export default function BandejaPage() {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Error al crear cliente');
       }
-
-      const result = await res.json();
-      const clienteId = result.clienteId;
 
       // Marcar solicitud como aprobada
       const { error: updateError } = await supabase
@@ -214,9 +213,12 @@ export default function BandejaPage() {
                   </div>
 
                   <div>
-                    <label className="text-gray-400 text-sm font-medium">Semanas de Plazo</label>
-                    <input type="number" className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 outline-none mt-1"
-                      value={formData.semanas} onChange={e => setFormData({...formData, semanas: Number(e.target.value)})} required />
+                    <label className="text-gray-400 text-sm font-medium">Esquema de Pago</label>
+                    <select className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 outline-none mt-1"
+                      value={formData.semanas} onChange={e => setFormData({...formData, semanas: Number(e.target.value)})} required>
+                      <option value={28}>28 pagos diarios (~6 semanas)</option>
+                      <option value={37}>37 pagos diarios (~8 semanas)</option>
+                    </select>
                   </div>
 
                   <div>
@@ -241,9 +243,9 @@ export default function BandejaPage() {
                   {formData.monto > 0 && formData.semanas > 0 && (
                     <div>
                       <InterestBreakdown
-                        capital={formData.monto / (formData.semanas * 5)}
-                        interes={(formData.monto * (Number(formData.tasa_interes || 0) / 100)) / (formData.semanas * 5)}
-                        total={(formData.monto + (formData.monto * (Number(formData.tasa_interes || 0) / 100))) / (formData.semanas * 5)}
+                        capital={formData.monto / formData.semanas}
+                        interes={(formData.monto * (Number(formData.tasa_interes || 0) / 100)) / formData.semanas}
+                        total={(formData.monto + (formData.monto * (Number(formData.tasa_interes || 0) / 100))) / formData.semanas}
                         showTitle={true}
                       />
                     </div>

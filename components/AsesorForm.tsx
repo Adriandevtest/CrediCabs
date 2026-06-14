@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export default function AsesorForm() {
+export default function AsesorForm({ userId }: { userId?: string | null }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '', telefono: '', direccion: '', ocupacion: '', ingresos: '', monto_solicitado: ''
@@ -47,10 +47,11 @@ export default function AsesorForm() {
         direccion: formData.direccion,
         ocupacion: formData.ocupacion,
         ingreso_mensual: Number(formData.ingresos),
-        monto_solicitado: Number(formData.monto_solicitado), // Nuevo campo
+        monto_solicitado: Number(formData.monto_solicitado),
         ine_url: ineUrl,
         comprobante_url: compUrl,
-        estado: 'pendiente'
+        estado: 'pendiente',
+        ...(userId ? { asesor_id: userId } : {}),
       }]);
 
       if (error) throw error;

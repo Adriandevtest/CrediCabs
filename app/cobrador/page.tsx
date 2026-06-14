@@ -2,244 +2,689 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
+import GeoTracker from '../../components/GeoTracker';
+
+type GpsEstado = 'inactivo' | 'activo' | 'error' | 'sin_soporte';
+type Tab = 'ruta' | 'historial' | 'mapa' | 'perfil';
+
+const MapaUbicacionPropia = dynamic(
+  () => import('../../components/MapaUbicacionPropia'),
+  { ssr: false, loading: () => <div className="h-56 flex items-center justify-center text-gray-400 text-sm">Cargando mapa...</div> }
+);
 
 export default function CobradorPage() {
+  const [activeTab, setActiveTab] = useState<Tab>('ruta');
+
+  // ── Datos de ruta ──
   const [ruta, setRuta] = useState<any[]>([]);
   const [completados, setCompletados] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [procesandoPago, setProcesandoPago] = useState<string | null>(null);
+
+  // ── Perfil del usuario ──
+  const [userId, setUserId] = useState<string | null>(null);
   const [nombreCobrador, setNombreCobrador] = useState('');
+  const [telefonoCobrador, setTelefonoCobrador] = useState('');
+  const [gpsEstado, setGpsEstado] = useState<GpsEstado>('inactivo');
+
+  // ── Historial ──
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [historialCargado, setHistorialCargado] = useState(false);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+
+  // ── Realtime ──
+  const [rtActivo, setRtActivo] = useState(false);
+
   const router = useRouter();
+  const today = new Date().toISOString().split('T')[0];
+  const fechaHoy = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // ────────────────────────────────────────────
+  // Inicialización
+  // ────────────────────────────────────────────
+  // Sincronizar activeTab con el hash de la URL (controlado por MobileNav)
+  useEffect(() => {
+    const readHash = () => {
+      const h = window.location.hash.slice(1) as Tab;
+      const valid: Tab[] = ['ruta', 'historial', 'mapa', 'perfil'];
+      setActiveTab(valid.includes(h) ? h : 'ruta');
+    };
+    readHash();
+    window.addEventListener('hashchange', readHash);
+    return () => window.removeEventListener('hashchange', readHash);
+  }, []);
 
   useEffect(() => {
     cargarRutaDelDia();
   }, []);
 
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`cobrador-rt-${userId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'creditos' }, (payload) => {
+        const updated = payload.new as any;
+        setRuta((prev) =>
+          prev.map((c) => c._creditoId === updated.id
+            ? { ...c, _credito: { ...c._credito, estado: updated.estado } }
+            : c
+          )
+        );
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, (payload) => {
+        const pago = payload.new as any;
+        if (!pago.pagado) return;
+        setRuta((prev) => {
+          const entry = prev.find((c) => c._creditoId === pago.credito_id);
+          if (!entry) return prev;
+          setCompletados((comp) => comp.some((x) => x._entryKey === entry._entryKey) ? comp : [...comp, entry]);
+          return prev.filter((c) => c._entryKey !== entry._entryKey);
+        });
+      })
+      .subscribe((status) => setRtActivo(status === 'SUBSCRIBED'));
+
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]);
+
+  // Cargar historial al entrar al tab por primera vez
+  useEffect(() => {
+    if (activeTab === 'historial' && !historialCargado && userId) {
+      cargarHistorial();
+    }
+  }, [activeTab, userId]);
+
+  // ────────────────────────────────────────────
+  // Funciones de datos
+  // ────────────────────────────────────────────
   const cargarRutaDelDia = async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/login'); return; }
+      setUserId(user.id);
 
       const { data: perfil } = await supabase
         .from('profiles')
-        .select('nombre_completo')
+        .select('nombre_completo, telefono')
         .eq('id', user.id)
         .single();
 
       if (perfil) {
-        setNombreCobrador(perfil.nombre_completo.split(' ')[0]);
+        setNombreCobrador(perfil.nombre_completo?.split(' ')[0] || '');
+        setTelefonoCobrador(perfil.telefono || '');
       }
 
       const { data, error } = await supabase
         .from('clientes')
         .select(`
-          id,
-          numero_cliente,
-          profiles ( nombre_completo ),
-          creditos ( id, monto_diario, estado, monto_total, interes_total, tasa_interes_porcentaje )
+          id, numero_cliente, direccion,
+          profiles (nombre_completo, telefono),
+          creditos (
+            id, monto_diario, estado, monto_total, interes_total, tasa_interes_porcentaje,
+            pagos_diarios (id, pagado, fecha_esperada)
+          )
         `)
         .eq('cobrador_asignado_id', user.id)
         .order('numero_cliente', { ascending: true });
 
       if (error) throw error;
 
-      const clientesActivos = data?.filter(c =>
-        c.creditos && c.creditos.length > 0 &&
-        (c.creditos[0].estado === 'activo' || !c.creditos[0].estado)
-      ) || [];
+      // Aplanar a una entrada por crédito activo (un cliente puede tener varios)
+      const pendientes: any[] = [];
+      const pagadosHoy: any[] = [];
 
-      setRuta(clientesActivos);
-    } catch (error) {
-      console.error('Error al cargar la ruta:', error);
+      (data || []).forEach((cliente) => {
+        const creditosActivos = (cliente.creditos || []).filter(
+          (c: any) => c.estado !== 'completado'
+        );
+        const tieneMultiples = creditosActivos.length > 1;
+        creditosActivos.forEach((credito: any, idx: number) => {
+          const entry = {
+            ...cliente,
+            _entryKey: `${cliente.id}_${credito.id}`,
+            _creditoId: credito.id,
+            _credito: credito,
+            _multiCredito: tieneMultiples,
+            _creditoNumero: idx + 1,
+          };
+          const pagoHoy = (credito.pagos_diarios || []).find(
+            (p: any) => p.fecha_esperada === today && p.pagado === true
+          );
+          if (pagoHoy) pagadosHoy.push(entry);
+          else pendientes.push(entry);
+        });
+      });
+
+      setRuta(pendientes);
+      setCompletados(pagadosHoy);
+    } catch (e) {
+      console.error('Error al cargar ruta:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const registrarPago = async (clienteId: string, creditoId: string, monto: number) => {
-    setProcesandoPago(clienteId);
+  const cargarHistorial = async () => {
+    if (!userId) return;
+    setLoadingHistorial(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const cliente = ruta.find(c => c.id === clienteId);
-      if (cliente) setCompletados(prev => [...prev, cliente]);
-      setRuta(prev => prev.filter(c => c.id !== clienteId));
-    } catch (error) {
-      alert('Error al registrar el pago.');
+      const { data } = await supabase
+        .from('clientes')
+        .select(`
+          id, numero_cliente,
+          profiles (nombre_completo),
+          creditos (
+            monto_diario, semanas_autorizadas,
+            pagos_diarios (id, numero_dia, fecha_esperada, pagado)
+          )
+        `)
+        .eq('cobrador_asignado_id', userId);
+
+      if (data) {
+        const todos: any[] = [];
+        data.forEach((cliente) => {
+          (cliente.creditos || []).forEach((cred: any) => {
+            (cred.pagos_diarios || [])
+              .filter((p: any) => p.pagado)
+              .forEach((pago: any) => {
+                todos.push({
+                  ...pago,
+                  cliente_nombre: (cliente.profiles as any)?.nombre_completo,
+                  numero_cliente: cliente.numero_cliente,
+                  monto_diario: cred.monto_diario,
+                  total_pagos: cred.semanas_autorizadas,
+                });
+              });
+          });
+        });
+        todos.sort((a, b) => b.fecha_esperada.localeCompare(a.fecha_esperada));
+        setHistorial(todos);
+      }
+    } finally {
+      setHistorialCargado(true);
+      setLoadingHistorial(false);
+    }
+  };
+
+  const registrarPago = async (entryKey: string, creditoId: string) => {
+    setProcesandoPago(creditoId);
+    try {
+      const { data: nextPayment, error: findError } = await supabase
+        .from('pagos_diarios')
+        .select('id')
+        .eq('credito_id', creditoId)
+        .eq('pagado', false)
+        .order('numero_dia', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (findError || !nextPayment) throw new Error('No hay pagos pendientes.');
+
+      const { error: updateError } = await supabase
+        .from('pagos_diarios')
+        .update({ pagado: true })
+        .eq('id', nextPayment.id);
+
+      if (updateError) throw updateError;
+
+      const entry = ruta.find((c) => c._entryKey === entryKey);
+      if (entry) {
+        setCompletados((prev) => [...prev, entry]);
+        setRuta((prev) => prev.filter((c) => c._entryKey !== entryKey));
+      }
+    } catch (e: any) {
+      alert('Error al registrar pago: ' + e.message);
     } finally {
       setProcesandoPago(null);
     }
   };
 
-  const totalDia = [...ruta, ...completados].reduce((acc, c) => acc + (c.creditos[0]?.monto_diario || 0), 0);
-  const totalPendiente = ruta.reduce((acc, c) => acc + (c.creditos[0]?.monto_diario || 0), 0);
-  const progreso = (ruta.length + completados.length) > 0
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  // ────────────────────────────────────────────
+  // Métricas
+  // ────────────────────────────────────────────
+  const totalDia = [...ruta, ...completados].reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
+  const totalCobrado = completados.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
+  const totalPendiente = ruta.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
+  const progreso = ruta.length + completados.length > 0
     ? Math.round((completados.length / (ruta.length + completados.length)) * 100)
     : 0;
 
-  const fechaHoy = new Date().toLocaleDateString('es-MX', {
-    weekday: 'long', day: 'numeric', month: 'long'
+  // Agrupar historial por fecha
+  const historialPorFecha: Record<string, any[]> = {};
+  historial.forEach((p) => {
+    if (!historialPorFecha[p.fecha_esperada]) historialPorFecha[p.fecha_esperada] = [];
+    historialPorFecha[p.fecha_esperada].push(p);
   });
+  const fechasHistorial = Object.keys(historialPorFecha).sort((a, b) => b.localeCompare(a));
 
+  const gpsInfo: Record<GpsEstado, { label: string; color: string; bg: string }> = {
+    activo: { label: 'GPS activo — ubicación en vivo', color: 'text-blue-600', bg: 'bg-blue-50' },
+    inactivo: { label: 'Iniciando GPS...', color: 'text-gray-500', bg: 'bg-gray-50' },
+    error: { label: 'No se pudo obtener ubicación', color: 'text-red-600', bg: 'bg-red-50' },
+    sin_soporte: { label: 'GPS no disponible en este dispositivo', color: 'text-gray-500', bg: 'bg-gray-50' },
+  };
+
+  // ────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────
   return (
-    <main className="min-h-screen pb-24 bg-gray-50">
+    <main className="min-h-screen pb-20 bg-gray-50">
 
+      {/* GeoTracker invisible — sólo rastrea */}
+      {userId && <GeoTracker userId={userId} onStatusChange={setGpsEstado} />}
+
+      {/* ── HEADER FIJO ── */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-50 px-4 pt-4 pb-3">
         <div className="flex justify-between items-center mb-3">
           <div>
-            <h1 className="text-lg font-medium text-gray-900 leading-tight">
-              Hola, <span className="text-red-600">{nombreCobrador || 'Cobrador'}</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-medium text-gray-900">
+                Hola, <span className="text-red-600">{nombreCobrador || 'Cobrador'}</span>
+              </h1>
+              <span
+                className={`w-2 h-2 rounded-full ${rtActivo ? 'bg-green-500' : 'bg-gray-300'}`}
+                title={rtActivo ? 'Tiempo real activo' : 'Conectando...'}
+              />
+            </div>
             <p className="text-xs text-gray-400 mt-0.5 capitalize">{fechaHoy} · Ruta del día</p>
           </div>
           <UserNav />
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-          <div
-            className="h-full bg-red-600 rounded-full transition-all duration-500"
-            style={{ width: `${progreso}%` }}
-          />
-        </div>
-        <div className="flex justify-between mt-1.5">
-          <span className="text-xs text-gray-400">
-            {completados.length} de {ruta.length + completados.length} cobros completados
-          </span>
-          <span className="text-xs text-red-600 font-medium">{progreso}%</span>
-        </div>
+
+        {/* Progreso — solo visible en tab Ruta */}
+        {activeTab === 'ruta' && (
+          <>
+            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+              <div className="h-full bg-red-600 rounded-full transition-all duration-500" style={{ width: `${progreso}%` }} />
+            </div>
+            <div className="flex justify-between mt-1.5">
+              <span className="text-xs text-gray-400">
+                {completados.length} de {ruta.length + completados.length} cobros completados
+              </span>
+              <span className="text-xs text-red-600 font-medium">{progreso}%</span>
+            </div>
+          </>
+        )}
       </header>
 
+      {/* ── CONTENIDO POR TAB ── */}
       <div className="px-4 pt-4 max-w-md mx-auto">
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className="bg-white rounded-xl border border-gray-100 p-3">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Meta del día</p>
-            <p className="text-xl font-medium text-red-600">
-              ${Math.round(totalDia).toLocaleString('es-MX')}
-            </p>
-            <p className="text-xs text-gray-400 mt-0.5">MXN total</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-3">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Por cobrar</p>
-            <p className="text-xl font-medium text-gray-900">
-              ${Math.round(totalPendiente).toLocaleString('es-MX')}
-            </p>
-            <p className="text-xs text-gray-400 mt-0.5">{ruta.length} visitas pendientes</p>
-          </div>
-        </div>
+        {/* ════ TAB: RUTA ════ */}
+        {activeTab === 'ruta' && (
+          <>
+            {/* Métricas */}
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              <div className="bg-white rounded-xl border border-gray-100 p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Meta</p>
+                <p className="text-lg font-semibold text-red-600">${Math.round(totalDia).toLocaleString('es-MX')}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Cobrado</p>
+                <p className="text-lg font-semibold text-emerald-600">${Math.round(totalCobrado).toLocaleString('es-MX')}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 p-3">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Pendiente</p>
+                <p className="text-lg font-semibold text-gray-900">${Math.round(totalPendiente).toLocaleString('es-MX')}</p>
+              </div>
+            </div>
 
-        <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">
-          Clientes pendientes
-        </p>
+            {loading ? (
+              <div className="text-center py-16 text-gray-400 text-sm">Cargando ruta...</div>
+            ) : ruta.length === 0 && completados.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 text-center py-12 px-6">
+                <p className="text-3xl mb-3">📭</p>
+                <h3 className="text-gray-800 font-medium">Sin clientes asignados</h3>
+                <p className="text-gray-400 text-sm mt-1">No tienes clientes en tu ruta.</p>
+              </div>
+            ) : (
+              <>
+                {/* Pendientes */}
+                {ruta.length > 0 && (
+                  <>
+                    <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">
+                      Clientes pendientes ({ruta.length})
+                    </p>
+                    <div className="flex flex-col gap-3 mb-6">
+                      {ruta.map((cliente) => {
+                        const credito = cliente._credito;
+                        const isProcessing = procesandoPago === cliente._creditoId;
+                        const atrasado = credito?.estado === 'atrasado';
 
-        {loading ? (
-          <div className="text-center py-16 text-gray-400 text-sm">Cargando ruta...</div>
-        ) : ruta.length === 0 && completados.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 text-center py-12 px-6">
-            <p className="text-3xl mb-3">📭</p>
-            <h3 className="text-gray-800 font-medium">Sin clientes asignados</h3>
-            <p className="text-gray-400 text-sm mt-1">No tienes clientes en tu ruta hoy.</p>
-          </div>
-        ) : ruta.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 text-center py-12 px-6">
-            <p className="text-3xl mb-3">🎉</p>
-            <h3 className="text-gray-800 font-medium">¡Ruta completada!</h3>
-            <p className="text-gray-400 text-sm mt-1">
-              Cobraste los {completados.length} clientes de hoy.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {ruta.map((cliente) => {
-              const credito = cliente.creditos[0];
-              const isProcessing = procesandoPago === cliente.id;
-              const atrasado = credito?.estado === 'atrasado';
+                        return (
+                          <div
+                            key={cliente._entryKey}
+                            className={`bg-white rounded-2xl p-4 border ${atrasado ? 'border-red-200 bg-red-50/30' : 'border-gray-100'}`}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-gray-400 font-mono">#{cliente.numero_cliente}</span>
+                                  {cliente._multiCredito && (
+                                    <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">
+                                      Crédito {cliente._creditoNumero}
+                                    </span>
+                                  )}
+                                </div>
+                                <h3 className="text-base font-semibold text-gray-900 leading-tight mt-0.5 truncate">
+                                  {cliente.profiles?.nombre_completo}
+                                </h3>
+                              </div>
+                              <div className="flex items-center gap-2 ml-2 shrink-0">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${atrasado ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                                  {atrasado ? '⚠ Atrasado' : '✓ Activo'}
+                                </span>
+                                <a
+                                  href={`tel:${cliente.profiles?.telefono || ''}`}
+                                  className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-green-600 hover:border-green-300 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />
+                                  </svg>
+                                </a>
+                              </div>
+                            </div>
 
-              return (
-                <div
-                  key={cliente.id}
-                  className={`bg-white rounded-2xl p-4 border ${atrasado ? 'border-red-200' : 'border-gray-100'}`}
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className="text-xs text-gray-400 font-mono">
-                        #{cliente.numero_cliente}
-                      </span>
-                      <h3 className="text-base font-medium text-gray-900 leading-tight mt-0.5">
-                        {cliente.profiles?.nombre_completo}
-                      </h3>
+                            {cliente.direccion && (
+                              <div className="flex items-start gap-1.5 mb-3">
+                                <svg className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <p className="text-xs text-gray-500 leading-snug">{cliente.direccion}</p>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-3 mb-3">
+                              <div>
+                                <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota diaria</p>
+                                <p className="text-xl font-semibold text-red-600 mt-0.5">
+                                  ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-gray-400 uppercase tracking-wider">Total a pagar</p>
+                                <p className="text-base font-medium text-gray-700 mt-0.5">
+                                  ${Math.round(credito.monto_total).toLocaleString('es-MX')}
+                                </p>
+                              </div>
+                            </div>
+
+                            {credito.interes_total > 0 && (
+                              <div className="rounded-xl p-3 mb-3 bg-amber-50 border border-amber-100">
+                                <p className="text-xs text-amber-600 uppercase tracking-wider font-medium mb-2">Desglose diario</p>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-gray-500">Capital/día</span>
+                                  <span className="text-gray-700 font-medium">
+                                    ${((credito.monto_total / (credito.monto_total + credito.interes_total)) * credito.monto_diario).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between text-xs mt-1">
+                                  <span className="text-amber-600">+ Interés/día</span>
+                                  <span className="text-amber-700 font-medium">
+                                    ${((credito.interes_total / (credito.monto_total + credito.interes_total)) * credito.monto_diario).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => registrarPago(cliente._entryKey, cliente._creditoId)}
+                              disabled={isProcessing}
+                              className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
+                            >
+                              {isProcessing ? (
+                                <span className="animate-pulse">Procesando...</span>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                  </svg>
+                                  Registrar pago
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${atrasado ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                        {atrasado ? '⚠ Atrasado' : '✓ Activo'}
-                      </span>
-                      
- <a href="tel:1234567890" className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors">
-  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />
-  </svg>
-</a>
-                    </div>
+                  </>
+                )}
+
+                {ruta.length === 0 && completados.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 text-center py-8 px-6 mb-6">
+                    <p className="text-3xl mb-2">🎉</p>
+                    <h3 className="text-gray-800 font-semibold">¡Ruta completada!</h3>
+                    <p className="text-gray-400 text-sm mt-1">Cobraste los {completados.length} clientes de hoy.</p>
                   </div>
+                )}
 
-                  <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-3 mb-3">
-                    <div>
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota hoy</p>
-                      <p className="text-xl font-medium text-red-600 mt-0.5">
-                        ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
-                      </p>
+                {completados.length > 0 && (
+                  <>
+                    <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">
+                      Pagados hoy ({completados.length})
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {completados.map((cliente) => {
+                        const credito = cliente._credito;
+                        return (
+                          <div key={cliente._entryKey} className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">{cliente.profiles?.nombre_completo}</p>
+                                <p className="text-xs text-gray-500">
+                                  #{cliente.numero_cliente}{cliente.direccion ? ` · ${cliente.direccion.split(',')[0]}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="text-emerald-700 font-bold text-sm">
+                              +${Math.round(credito?.monto_diario || 0).toLocaleString('es-MX')}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Deuda total</p>
-                      <p className="text-base font-medium text-gray-700 mt-0.5">
-                        ${Math.round(credito.monto_total).toLocaleString('es-MX')}
-                      </p>
-                    </div>
-                  </div>
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
 
-                  {credito.interes_total > 0 && (
-                    <div className="rounded-xl p-3 mb-3 bg-amber-50 border border-amber-100">
-                      <p className="text-xs text-amber-600 uppercase tracking-wider font-medium mb-2">
-                        Desglose diario
-                      </p>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-500">Capital/día</span>
-                        <span className="text-gray-700 font-medium">
-                          ${(credito.monto_total / (credito.monto_total + credito.interes_total) * credito.monto_diario).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
+        {/* ════ TAB: HISTORIAL ════ */}
+        {activeTab === 'historial' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-gray-900 font-bold text-base">Mis Cobros</h2>
+                <p className="text-gray-400 text-xs">Historial de pagos registrados por ti</p>
+              </div>
+              {historialCargado && (
+                <button onClick={cargarHistorial} className="text-gray-400 hover:text-red-500 transition-colors" title="Actualizar">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {loadingHistorial ? (
+              <div className="text-center py-16 text-gray-400 text-sm">Cargando historial...</div>
+            ) : historial.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 text-center py-12 px-6">
+                <p className="text-3xl mb-3">📋</p>
+                <p className="text-gray-700 font-medium">Sin cobros registrados aún</p>
+                <p className="text-gray-400 text-sm mt-1">Aquí verás todos tus pagos anteriores.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {fechasHistorial.map((fecha) => {
+                  const pagosDelDia = historialPorFecha[fecha];
+                  const totalFecha = pagosDelDia.reduce((s: number, p: any) => s + Number(p.monto_diario || 0), 0);
+                  const label = new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', {
+                    weekday: 'long', day: 'numeric', month: 'short',
+                  });
+                  const esHoy = fecha === today;
+
+                  return (
+                    <div key={fecha} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                      {/* Cabecera de fecha */}
+                      <div className={`px-4 py-2.5 flex justify-between items-center ${esHoy ? 'bg-red-50 border-b border-red-100' : 'bg-gray-50 border-b border-gray-100'}`}>
+                        <p className={`text-xs font-semibold capitalize ${esHoy ? 'text-red-600' : 'text-gray-600'}`}>
+                          {esHoy ? '▶ Hoy · ' : ''}{label}
+                        </p>
+                        <span className={`text-xs font-bold ${esHoy ? 'text-red-600' : 'text-emerald-600'}`}>
+                          +${Math.round(totalFecha).toLocaleString('es-MX')}
                         </span>
                       </div>
-                      <div className="flex justify-between text-xs mt-1">
-                        <span className="text-amber-600">+ Interés/día</span>
-                        <span className="text-amber-700 font-medium">
-                          ${(credito.interes_total / (credito.monto_total + credito.interes_total) * credito.monto_diario).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
-                        </span>
+
+                      {/* Pagos del día */}
+                      <div className="divide-y divide-gray-50">
+                        {pagosDelDia.map((pago: any) => (
+                          <div key={pago.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-7 h-7 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
+                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-800 leading-tight">{pago.cliente_nombre}</p>
+                                <p className="text-[10px] text-gray-400">
+                                  #{pago.numero_cliente} · Pago {pago.numero_dia}/{pago.total_pagos}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="text-emerald-600 font-semibold text-sm shrink-0">
+                              +${Math.round(pago.monto_diario).toLocaleString('es-MX')}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  )}
-
-                  <button
-                    onClick={() => registrarPago(cliente.id, credito.id, credito.monto_diario)}
-                    disabled={isProcessing}
-                    className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
-                  >
-                    {isProcessing ? (
-                      <span className="animate-pulse">Procesando...</span>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        Registrar pago
-                      </>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
+
+        {/* ════ TAB: MAPA ════ */}
+        {activeTab === 'mapa' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-gray-900 font-bold text-base">Mi Ubicación</h2>
+              <p className="text-gray-400 text-xs">Tu posición GPS en tiempo real</p>
+            </div>
+
+            {/* Estado GPS */}
+            <div className={`rounded-2xl p-3 flex items-center gap-3 mb-4 ${gpsInfo[gpsEstado].bg}`}>
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${gpsEstado === 'activo' ? 'bg-blue-500 animate-pulse' : gpsEstado === 'error' ? 'bg-red-400' : 'bg-gray-400'}`} />
+              <p className={`text-sm font-medium ${gpsInfo[gpsEstado].color}`}>{gpsInfo[gpsEstado].label}</p>
+            </div>
+
+            {userId && <MapaUbicacionPropia userId={userId} />}
+          </div>
+        )}
+
+        {/* ════ TAB: PERFIL ════ */}
+        {activeTab === 'perfil' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-gray-900 font-bold text-base">Mi Perfil</h2>
+            </div>
+
+            {/* Avatar + datos */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-xl shrink-0">
+                  {(nombreCobrador || 'C')[0].toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-gray-900 font-bold text-base leading-tight">{nombreCobrador || 'Cobrador'}</p>
+                  <span className="text-xs text-white bg-red-600 px-2 py-0.5 rounded-full font-medium">Cobrador</span>
+                </div>
+              </div>
+
+              {telefonoCobrador && (
+                <a href={`tel:${telefonoCobrador}`} className="flex items-center gap-3 py-2.5 border-t border-gray-50">
+                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Teléfono</p>
+                    <p className="text-gray-700 text-sm">{telefonoCobrador}</p>
+                  </div>
+                </a>
+              )}
+
+              {/* GPS status */}
+              <div className="flex items-center gap-3 py-2.5 border-t border-gray-50">
+                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Rastreo GPS</p>
+                  <p className={`text-sm font-medium ${gpsInfo[gpsEstado].color}`}>{gpsInfo[gpsEstado].label}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Resumen del día */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+              <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">Resumen de hoy</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] text-gray-400">Cobros realizados</p>
+                  <p className="text-xl font-bold text-gray-900">{completados.length}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400">Total cobrado</p>
+                  <p className="text-xl font-bold text-emerald-600">${Math.round(totalCobrado).toLocaleString('es-MX')}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Cerrar sesión */}
+            <button
+              onClick={cerrarSesion}
+              className="w-full border-2 border-red-200 text-red-600 py-3 rounded-xl text-sm font-semibold active:bg-red-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Cerrar sesión
+            </button>
+          </div>
+        )}
+
       </div>
+
     </main>
   );
 }
