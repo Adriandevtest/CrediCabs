@@ -82,7 +82,10 @@ export default function PanelCliente() {
       fd.append('cliente_id', clienteId);
       fd.append('credito_id', credito.id);
       if (proximoPendiente?.id) fd.append('pago_id', proximoPendiente.id);
-      fd.append('monto', String(Math.round(credito.monto_diario)));
+      const hoyStr = new Date().toISOString().split('T')[0];
+      const moraEnvio = (credito.pagos_diarios || [])
+        .filter((p: any) => p.fecha_esperada < hoyStr && !p.pagado).length * 50;
+      fd.append('monto', String(Math.round(credito.monto_diario) + moraEnvio));
       fd.append('comprobante', transferFile);
       const res = await fetch('/api/transferencias/crear', { method: 'POST', body: fd });
       if (!res.ok) {
@@ -139,6 +142,7 @@ export default function PanelCliente() {
   const pagosPendientes = cronograma.length - pagosPagados;
   const porcentaje = cronograma.length > 0 ? Math.round((pagosPagados / cronograma.length) * 100) : 0;
   const pagosAtrasados = cronograma.filter(p => p.atrasado);
+  const moraTotal = pagosAtrasados.length * 50;
   const proximoPendiente = cronograma.find(p => !p.pagado);
   const totalAPagar = credito ? credito.monto_total + (credito.interes_total || 0) : 0;
 
@@ -305,23 +309,37 @@ export default function PanelCliente() {
               </div>
 
               {proximoPendiente && (
-                <div className={`rounded-xl p-3 flex justify-between items-center ${
+                <div className={`rounded-xl p-3 ${
                   proximoPendiente.atrasado
                     ? 'bg-red-950/30 border border-red-800/40'
                     : 'bg-blue-950/30 border border-blue-800/40'
                 }`}>
-                  <div>
-                    <p className={`text-[10px] uppercase font-bold ${proximoPendiente.atrasado ? 'text-red-400' : 'text-blue-400'}`}>
-                      {proximoPendiente.atrasado ? 'Pago atrasado' : 'Próximo pago'}
-                    </p>
-                    <p className="text-white font-black text-base">${Math.round(proximoPendiente.monto).toLocaleString('es-MX')}</p>
-                    <p className="text-gray-400 text-[10px]">{proximoPendiente.fecha}</p>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className={`text-[10px] uppercase font-bold ${proximoPendiente.atrasado ? 'text-red-400' : 'text-blue-400'}`}>
+                        {proximoPendiente.atrasado ? 'Pago atrasado' : 'Próximo pago'}
+                      </p>
+                      <p className="text-white font-black text-base">${Math.round(proximoPendiente.monto).toLocaleString('es-MX')}</p>
+                      <p className="text-gray-400 text-[10px]">{proximoPendiente.fecha}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                      proximoPendiente.atrasado ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
+                    }`}>
+                      #{proximoPendiente.numero}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
-                    proximoPendiente.atrasado ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
-                  }`}>
-                    #{proximoPendiente.numero}
-                  </span>
+                  {moraTotal > 0 && (
+                    <div className="mt-2 pt-2 border-t border-red-800/40 flex justify-between items-center">
+                      <div>
+                        <p className="text-red-400 text-[10px] font-bold uppercase">Mora acumulada</p>
+                        <p className="text-red-300 text-[10px]">{pagosAtrasados.length} día{pagosAtrasados.length !== 1 ? 's' : ''} × $50</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-red-400 font-bold">+${moraTotal.toLocaleString('es-MX')}</p>
+                        <p className="text-white font-black text-sm">Total: ${(Math.round(proximoPendiente.monto) + moraTotal).toLocaleString('es-MX')}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -361,15 +379,26 @@ export default function PanelCliente() {
                       </div>
                     ) : (
                       <>
-                        <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-3">
-                          <p className="text-blue-400 text-[10px] font-bold uppercase mb-1">Este comprobante cubre</p>
+                        <div className={`rounded-xl p-3 ${moraTotal > 0 ? 'bg-red-950/30 border border-red-800/40' : 'bg-blue-950/30 border border-blue-800/40'}`}>
+                          <p className={`text-[10px] font-bold uppercase mb-1 ${moraTotal > 0 ? 'text-red-400' : 'text-blue-400'}`}>Este comprobante cubre</p>
                           <div className="flex justify-between items-center">
                             <div>
                               <p className="text-white font-bold text-sm">Pago #{proximoPendiente.numero}</p>
                               <p className="text-gray-400 text-[10px]">{proximoPendiente.fecha}</p>
                             </div>
-                            <p className="text-blue-300 font-black text-lg">${Math.round(proximoPendiente.monto).toLocaleString('es-MX')}</p>
+                            <p className={`font-black text-lg ${moraTotal > 0 ? 'text-red-300' : 'text-blue-300'}`}>
+                              ${Math.round(proximoPendiente.monto).toLocaleString('es-MX')}
+                            </p>
                           </div>
+                          {moraTotal > 0 && (
+                            <div className="mt-2 pt-2 border-t border-red-800/40 flex justify-between items-center">
+                              <p className="text-red-400 text-[10px] font-bold">+ Mora ({pagosAtrasados.length} día{pagosAtrasados.length !== 1 ? 's' : ''})</p>
+                              <div className="text-right">
+                                <p className="text-red-400 text-xs font-bold">+${moraTotal.toLocaleString('es-MX')}</p>
+                                <p className="text-white font-black text-sm">Total: ${(Math.round(proximoPendiente.monto) + moraTotal).toLocaleString('es-MX')}</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div>
@@ -452,11 +481,16 @@ export default function PanelCliente() {
                     </div>
 
                     {/* Monto */}
-                    <p className={`text-sm font-black shrink-0 ${
-                      item.pagado ? 'text-emerald-400' : item.atrasado ? 'text-red-400' : 'text-yellow-500'
-                    }`}>
-                      ${Math.round(item.monto).toLocaleString('es-MX')}
-                    </p>
+                    <div className="text-right shrink-0">
+                      <p className={`text-sm font-black ${
+                        item.pagado ? 'text-emerald-400' : item.atrasado ? 'text-red-400' : 'text-yellow-500'
+                      }`}>
+                        ${Math.round(item.monto).toLocaleString('es-MX')}
+                      </p>
+                      {item.atrasado && (
+                        <p className="text-[9px] text-red-500 font-bold">+$50 mora</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

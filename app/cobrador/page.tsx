@@ -46,6 +46,10 @@ export default function CobradorPage() {
   const today = new Date().toISOString().split('T')[0];
   const fechaHoy = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  const MORA_POR_DIA = 50;
+  const calcularMora = (pagos: any[]) =>
+    (pagos || []).filter((p: any) => p.fecha_esperada < today && !p.pagado).length * MORA_POR_DIA;
+
   // ────────────────────────────────────────────
   // Inicialización
   // ────────────────────────────────────────────
@@ -217,7 +221,7 @@ export default function CobradorPage() {
     }
   };
 
-  const registrarPago = async (entryKey: string, creditoId: string) => {
+  const registrarPago = async (entryKey: string, creditoId: string, mora: number = 0) => {
     setProcesandoPago(creditoId);
     try {
       const { data: nextPayment, error: findError } = await supabase
@@ -233,7 +237,7 @@ export default function CobradorPage() {
 
       const { error: updateError } = await supabase
         .from('pagos_diarios')
-        .update({ pagado: true })
+        .update({ pagado: true, mora })
         .eq('id', nextPayment.id);
 
       if (updateError) throw updateError;
@@ -261,6 +265,7 @@ export default function CobradorPage() {
   const totalDia = [...ruta, ...completados].reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
   const totalCobrado = completados.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
   const totalPendiente = ruta.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
+  const morasPendientes = ruta.reduce((a, c) => a + calcularMora(c._credito?.pagos_diarios), 0);
   const progreso = ruta.length + completados.length > 0
     ? Math.round((completados.length / (ruta.length + completados.length)) * 100)
     : 0;
@@ -341,7 +346,8 @@ export default function CobradorPage() {
               </div>
               <div className="bg-white rounded-xl border border-gray-100 p-3">
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Pendiente</p>
-                <p className="text-lg font-semibold text-gray-900">${Math.round(totalPendiente).toLocaleString('es-MX')}</p>
+                <p className="text-lg font-semibold text-gray-900">${Math.round(totalPendiente + morasPendientes).toLocaleString('es-MX')}</p>
+                {morasPendientes > 0 && <p className="text-[9px] text-red-500 font-medium">+${morasPendientes} mora</p>}
               </div>
             </div>
 
@@ -366,8 +372,10 @@ export default function CobradorPage() {
                         const credito = cliente._credito;
                         const isProcessing = procesandoPago === cliente._creditoId;
                         const atrasado = credito?.estado === 'atrasado';
+                        const mora = calcularMora(credito.pagos_diarios);
+                        const totalACobrar = Math.round(credito.monto_diario) + mora;
 
-                        const pagosOrdenados = [...(credito.pagos_diarios || [])].sort(
+                        const pagosOrdenados =[...(credito.pagos_diarios || [])].sort(
                           (a: any, b: any) => a.numero_dia - b.numero_dia
                         );
                         const nextPago = pagosOrdenados.find((p: any) => !p.pagado);
@@ -425,19 +433,35 @@ export default function CobradorPage() {
                               </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-xl p-3 mb-3">
-                              <div>
-                                <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota diaria</p>
-                                <p className="text-xl font-semibold text-red-600 mt-0.5">
-                                  ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
-                                </p>
+                            <div className={`rounded-xl p-3 mb-3 ${mora > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota diaria</p>
+                                  <p className="text-xl font-semibold text-red-600 mt-0.5">
+                                    ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
+                                  </p>
+                                </div>
+                                {mora > 0 ? (
+                                  <div className="text-right">
+                                    <p className="text-xs text-red-500 uppercase tracking-wider font-bold">Mora</p>
+                                    <p className="text-base font-bold text-red-600 mt-0.5">+${mora.toLocaleString('es-MX')}</p>
+                                    <p className="text-[10px] text-red-400">{mora / MORA_POR_DIA} día{mora / MORA_POR_DIA !== 1 ? 's' : ''} de atraso</p>
+                                  </div>
+                                ) : (
+                                  <div className="text-right">
+                                    <p className="text-xs text-gray-400 uppercase tracking-wider">Total crédito</p>
+                                    <p className="text-base font-medium text-gray-700 mt-0.5">
+                                      ${Math.round(credito.monto_total).toLocaleString('es-MX')}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
-                              <div className="text-right">
-                                <p className="text-xs text-gray-400 uppercase tracking-wider">Total a pagar</p>
-                                <p className="text-base font-medium text-gray-700 mt-0.5">
-                                  ${Math.round(credito.monto_total).toLocaleString('es-MX')}
-                                </p>
-                              </div>
+                              {mora > 0 && (
+                                <div className="mt-2 pt-2 border-t border-red-200 flex justify-between items-center">
+                                  <p className="text-xs text-red-700 font-bold uppercase tracking-wider">Total a cobrar</p>
+                                  <p className="text-lg font-black text-red-700">${totalACobrar.toLocaleString('es-MX')}</p>
+                                </div>
+                              )}
                             </div>
 
                             {credito.interes_total > 0 && (
@@ -459,7 +483,7 @@ export default function CobradorPage() {
                             )}
 
                             <button
-                              onClick={() => registrarPago(cliente._entryKey, cliente._creditoId)}
+                              onClick={() => registrarPago(cliente._entryKey, cliente._creditoId, mora)}
                               disabled={isProcessing}
                               className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
                             >
@@ -471,7 +495,7 @@ export default function CobradorPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                       d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                                   </svg>
-                                  Registrar pago
+                                  {mora > 0 ? `Cobrar $${totalACobrar.toLocaleString('es-MX')}` : 'Registrar pago'}
                                 </>
                               )}
                             </button>
