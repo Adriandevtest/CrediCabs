@@ -61,7 +61,7 @@ export default function BandejaPage() {
     try {
       const { data: transData } = await supabase
         .from('transferencias')
-        .select('*')
+        .select('*, creditos(monto_diario)')
         .eq('estado', 'pendiente')
         .order('created_at', { ascending: false });
 
@@ -343,29 +343,58 @@ export default function BandejaPage() {
                   const hora = new Date(trans.created_at).toLocaleTimeString('es-MX', {
                     hour: '2-digit', minute: '2-digit',
                   });
+                  const cuota = trans.creditos?.monto_diario || 0;
+                  const mora = cuota > 0 ? Math.max(0, Math.round(trans.monto) - Math.round(cuota)) : 0;
+                  const diasAtraso = mora > 0 ? Math.round(mora / 50) : 0;
                   return (
-                    <div key={trans.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-blue-500/50 transition-all flex flex-col gap-4">
+                    <div key={trans.id} className={`bg-gray-900 border rounded-xl p-5 hover:border-opacity-80 transition-all flex flex-col gap-4 ${mora > 0 ? 'border-red-800/50 hover:border-red-600/60' : 'border-gray-800 hover:border-blue-500/50'}`}>
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-white font-bold text-base leading-tight">{trans.cliente_nombre}</p>
                           <p className="text-gray-500 text-xs mt-0.5">{fecha} · {hora}</p>
                         </div>
-                        <span className="bg-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
-                          Pendiente
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="bg-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                            Pendiente
+                          </span>
+                          {mora > 0 && (
+                            <span className="bg-red-500/20 text-red-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                              +mora
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between bg-blue-950/30 border border-blue-800/30 rounded-xl px-4 py-3">
-                        <div>
-                          <p className="text-blue-400 text-[10px] uppercase font-bold">Monto</p>
-                          <p className="text-white font-black text-xl">${Number(trans.monto).toLocaleString('es-MX')}</p>
-                        </div>
-                        <i className="fa-solid fa-receipt text-blue-700 text-2xl" />
+                      <div className={`rounded-xl px-4 py-3 ${mora > 0 ? 'bg-red-950/30 border border-red-800/30' : 'bg-blue-950/30 border border-blue-800/30'}`}>
+                        {mora > 0 ? (
+                          <>
+                            <div className="flex justify-between items-center mb-1.5">
+                              <p className="text-gray-400 text-[10px] uppercase font-bold">Cuota</p>
+                              <p className="text-gray-300 font-bold text-sm">${Math.round(cuota).toLocaleString('es-MX')}</p>
+                            </div>
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="text-red-400 text-[10px] uppercase font-bold">Mora ({diasAtraso} día{diasAtraso !== 1 ? 's' : ''})</p>
+                              <p className="text-red-400 font-bold text-sm">+${mora.toLocaleString('es-MX')}</p>
+                            </div>
+                            <div className="pt-1.5 border-t border-red-800/40 flex justify-between items-center">
+                              <p className="text-red-300 text-[10px] uppercase font-bold">Total recibido</p>
+                              <p className="text-white font-black text-xl">${Number(trans.monto).toLocaleString('es-MX')}</p>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-blue-400 text-[10px] uppercase font-bold">Monto</p>
+                              <p className="text-white font-black text-xl">${Number(trans.monto).toLocaleString('es-MX')}</p>
+                            </div>
+                            <i className="fa-solid fa-receipt text-blue-700 text-2xl" />
+                          </div>
+                        )}
                       </div>
 
                       <button
-                        onClick={() => { setSelectedTrans(trans); setTransLightbox(false); }}
-                        className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                        onClick={() => { setSelectedTrans({ ...trans, _cuota: cuota, _mora: mora, _diasAtraso: diasAtraso }); setTransLightbox(false); }}
+                        className={`w-full text-white py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 ${mora > 0 ? 'bg-red-700 hover:bg-red-800 active:bg-red-900' : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'}`}
                       >
                         <i className="fa-solid fa-image" />
                         Ver Comprobante
@@ -673,15 +702,30 @@ export default function BandejaPage() {
             </div>
 
             {/* Info strip */}
-            <div className="shrink-0 px-4 py-2 border-t border-gray-800 flex items-center justify-between text-xs bg-gray-900">
-              <span className="text-gray-500">
-                {new Date(selectedTrans.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </span>
-              {selectedTrans.pago_diario_id ? (
-                <span className="text-blue-400 font-medium">Pago vinculado</span>
-              ) : (
-                <span className="text-gray-600">Sin pago vinculado</span>
+            <div className="shrink-0 px-4 py-2 border-t border-gray-800 bg-gray-900 space-y-1.5">
+              {selectedTrans._mora > 0 && (
+                <div className="bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="text-red-400 text-[10px] font-bold uppercase">Incluye mora</p>
+                    <p className="text-red-300 text-[10px] font-bold">{selectedTrans._diasAtraso} día{selectedTrans._diasAtraso !== 1 ? 's' : ''} de atraso</p>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Cuota: <span className="text-white font-bold">${Math.round(selectedTrans._cuota).toLocaleString('es-MX')}</span></span>
+                    <span className="text-red-400">Mora: <span className="font-bold">+${selectedTrans._mora.toLocaleString('es-MX')}</span></span>
+                    <span className="text-white font-black">Total: ${Number(selectedTrans.monto).toLocaleString('es-MX')}</span>
+                  </div>
+                </div>
               )}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">
+                  {new Date(selectedTrans.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+                {selectedTrans.pago_diario_id ? (
+                  <span className="text-blue-400 font-medium">Pago vinculado</span>
+                ) : (
+                  <span className="text-gray-600">Sin pago vinculado</span>
+                )}
+              </div>
             </div>
 
             {/* Action buttons */}
