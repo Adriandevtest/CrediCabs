@@ -9,42 +9,80 @@ import { LumaSpin } from '../../components/luma-spin';
 import { ImageLightbox } from '../../components/ImageLightbox';
 
 export default function BandejaPage() {
+  const [bandejaTab, setBandejaTab] = useState<'prospectos' | 'transferencias'>('prospectos');
+
+  // ── Prospectos ──────────────────────────────────────────────
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [cobradores, setCobradores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [selectedSolicitud, setSelectedSolicitud] = useState<any | null>(null);
   const [formData, setFormData] = useState({ monto: 5000, semanas: 28, tasa_interes: 40, cobrador_id: '' });
   const [procesando, setProcesando] = useState(false);
   const [mobileTab, setMobileTab] = useState<'expediente' | 'configurar'>('expediente');
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
+  // ── Transferencias ──────────────────────────────────────────
+  const [transferencias, setTransferencias] = useState<any[]>([]);
+  const [loadingTrans, setLoadingTrans] = useState(false);
+  const [selectedTrans, setSelectedTrans] = useState<any | null>(null);
+  const [procesandoTrans, setProcesandoTrans] = useState(false);
+  const [transLightbox, setTransLightbox] = useState(false);
+
   useEffect(() => { cargarDatos(); }, []);
 
-  // Reset tab when a new solicitud is selected
   useEffect(() => {
     if (selectedSolicitud) setMobileTab('expediente');
   }, [selectedSolicitud?.id]);
 
+  useEffect(() => {
+    if (bandejaTab === 'transferencias' && transferencias.length === 0 && !loadingTrans) {
+      cargarTransferencias();
+    }
+  }, [bandejaTab]);
+
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const { data: solData } = await supabase
-        .from('solicitudes')
-        .select('*')
-        .eq('estado', 'pendiente')
-        .order('created_at', { ascending: false });
-      if (solData) setSolicitudes(solData);
-
-      const { data: cobData } = await supabase
-        .from('profiles')
-        .select('id, nombre_completo')
-        .eq('rol', 'cobrador');
-      if (cobData) setCobradores(cobData);
+      const [solRes, cobRes] = await Promise.all([
+        supabase.from('solicitudes').select('*').eq('estado', 'pendiente').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, nombre_completo').eq('rol', 'cobrador'),
+      ]);
+      if (solRes.data) setSolicitudes(solRes.data);
+      if (cobRes.data) setCobradores(cobRes.data);
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const cargarTransferencias = async () => {
+    setLoadingTrans(true);
+    try {
+      const { data: transData } = await supabase
+        .from('transferencias')
+        .select('*')
+        .eq('estado', 'pendiente')
+        .order('created_at', { ascending: false });
+
+      if (transData && transData.length > 0) {
+        const ids = [...new Set(transData.map((t: any) => t.cliente_id))];
+        const { data: profData } = await supabase
+          .from('profiles')
+          .select('id, nombre_completo')
+          .in('id', ids);
+        const profMap = new Map((profData || []).map((p: any) => [p.id, p]));
+        setTransferencias(transData.map((t: any) => ({
+          ...t,
+          cliente_nombre: profMap.get(t.cliente_id)?.nombre_completo || 'Cliente',
+        })));
+      } else {
+        setTransferencias([]);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingTrans(false);
     }
   };
 
@@ -98,13 +136,61 @@ export default function BandejaPage() {
     }
   };
 
+  const handleAprobarTransferencia = async () => {
+    if (!selectedTrans) return;
+    setProcesandoTrans(true);
+    try {
+      const res = await fetch('/api/transferencias/accion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transferenciaId: selectedTrans.id,
+          pagoId: selectedTrans.pago_diario_id || null,
+          accion: 'aprobar',
+        }),
+      });
+      if (!res.ok) throw new Error('Error al aprobar');
+      setSelectedTrans(null);
+      setTransLightbox(false);
+      setTransferencias(prev => prev.filter(t => t.id !== selectedTrans.id));
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setProcesandoTrans(false);
+    }
+  };
+
+  const handleRechazarTransferencia = async () => {
+    if (!selectedTrans || !confirm('¿Rechazar este comprobante?')) return;
+    setProcesandoTrans(true);
+    try {
+      const res = await fetch('/api/transferencias/accion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transferenciaId: selectedTrans.id,
+          pagoId: null,
+          accion: 'rechazar',
+        }),
+      });
+      if (!res.ok) throw new Error('Error al rechazar');
+      setSelectedTrans(null);
+      setTransLightbox(false);
+      setTransferencias(prev => prev.filter(t => t.id !== selectedTrans.id));
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setProcesandoTrans(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-950 pb-20 md:p-8">
       {/* Header móvil sticky */}
       <header className="md:hidden sticky top-0 z-40 bg-gray-950/95 backdrop-blur border-b border-gray-800 px-4 py-3 flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-black text-white leading-tight">Revisión de <span className="text-red-600">Prospectos</span></h1>
-          <p className="text-gray-500 text-[9px] uppercase tracking-widest">Bandeja de Entrada</p>
+          <h1 className="text-xl font-black text-white leading-tight">Bandeja de <span className="text-red-600">Entrada</span></h1>
+          <p className="text-gray-500 text-[9px] uppercase tracking-widest">Panel de Revisión</p>
         </div>
         <UserNav />
       </header>
@@ -122,66 +208,170 @@ export default function BandejaPage() {
         </nav>
 
         {/* Header desktop */}
-        <header className="hidden md:flex pt-0 pb-6 border-b border-red-900 justify-between items-center mb-8">
+        <header className="hidden md:flex pt-0 pb-6 border-b border-red-900 justify-between items-center mb-6">
           <div>
-            <h1 className="text-4xl font-black text-white">Revisión de <span className="text-red-600">Prospectos</span></h1>
-            <p className="text-gray-400 text-base tracking-widest uppercase">Bandeja de Entrada</p>
+            <h1 className="text-4xl font-black text-white">Bandeja de <span className="text-red-600">Entrada</span></h1>
+            <p className="text-gray-400 text-base tracking-widest uppercase">Panel de Revisión</p>
           </div>
         </header>
 
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4"><LumaSpin /></div>
-        ) : solicitudes.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 p-10 rounded-xl text-center text-gray-500">
-            No hay solicitudes pendientes por revisar.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {solicitudes.map(sol => (
-              <div key={sol.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-yellow-500 transition-all flex flex-col">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-xl font-bold text-white">{sol.nombre_prospecto}</h3>
-                  <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-bold uppercase">Pendiente</span>
-                </div>
-                <div className="text-sm text-gray-400 space-y-2 mb-4 flex-grow">
-                  <p><i className="fa-solid fa-phone w-5 text-gray-500" /> {sol.telefono}</p>
-                  <p><i className="fa-solid fa-briefcase w-5 text-gray-500" /> {sol.ocupacion}</p>
-                  <p><i className="fa-solid fa-money-bill-wave w-5 text-green-500" /> Ingreso: <span className="text-white font-bold">${sol.ingreso_mensual}</span></p>
-                  <p className="text-xs mt-2 border-t border-gray-800 pt-2">{sol.direccion}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedSolicitud(sol);
-                    setFormData({ monto: 5000, semanas: 28, tasa_interes: 40, cobrador_id: '' });
-                  }}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded font-bold transition-colors border border-gray-700"
-                >
-                  Ver Expediente
-                </button>
+        {/* ── Tab switcher ── */}
+        <div className="flex gap-2 mb-6 mt-3 md:mt-0">
+          <button
+            onClick={() => setBandejaTab('prospectos')}
+            className={`flex-1 md:flex-none md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              bandejaTab === 'prospectos'
+                ? 'bg-red-600 text-white shadow-lg shadow-red-900/40'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            <i className="fa-solid fa-file-lines" />
+            Prospectos
+            {solicitudes.length > 0 && (
+              <span className="bg-white/20 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {solicitudes.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setBandejaTab('transferencias')}
+            className={`flex-1 md:flex-none md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              bandejaTab === 'transferencias'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            <i className="fa-solid fa-building-columns" />
+            Transferencias
+            {transferencias.length > 0 && (
+              <span className="bg-white/20 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {transferencias.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ── PROSPECTOS ── */}
+        {bandejaTab === 'prospectos' && (
+          <>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4"><LumaSpin /></div>
+            ) : solicitudes.length === 0 ? (
+              <div className="bg-gray-900 border border-gray-800 p-10 rounded-xl text-center text-gray-500">
+                No hay solicitudes pendientes por revisar.
               </div>
-            ))}
-          </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {solicitudes.map(sol => (
+                  <div key={sol.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-yellow-500 transition-all flex flex-col">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-xl font-bold text-white">{sol.nombre_prospecto}</h3>
+                      <span className="bg-yellow-500/20 text-yellow-500 text-xs px-2 py-1 rounded font-bold uppercase">Pendiente</span>
+                    </div>
+                    <div className="text-sm text-gray-400 space-y-2 mb-4 flex-grow">
+                      <p><i className="fa-solid fa-phone w-5 text-gray-500" /> {sol.telefono}</p>
+                      <p><i className="fa-solid fa-briefcase w-5 text-gray-500" /> {sol.ocupacion}</p>
+                      <p><i className="fa-solid fa-money-bill-wave w-5 text-green-500" /> Ingreso: <span className="text-white font-bold">${sol.ingreso_mensual}</span></p>
+                      <p className="text-xs mt-2 border-t border-gray-800 pt-2">{sol.direccion}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedSolicitud(sol);
+                        setFormData({ monto: 5000, semanas: 28, tasa_interes: 40, cobrador_id: '' });
+                      }}
+                      className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded font-bold transition-colors border border-gray-700"
+                    >
+                      Ver Expediente
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── TRANSFERENCIAS ── */}
+        {bandejaTab === 'transferencias' && (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-gray-400 text-sm">Comprobantes de pago enviados por clientes</p>
+              <button
+                onClick={cargarTransferencias}
+                className="text-gray-500 hover:text-blue-400 transition-colors p-1"
+                title="Actualizar"
+              >
+                <i className="fa-solid fa-rotate text-sm" />
+              </button>
+            </div>
+
+            {loadingTrans ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4"><LumaSpin /></div>
+            ) : transferencias.length === 0 ? (
+              <div className="bg-gray-900 border border-gray-800 p-10 rounded-xl text-center">
+                <i className="fa-solid fa-building-columns text-gray-700 text-4xl mb-3 block" />
+                <p className="text-gray-400 font-medium">Sin transferencias pendientes</p>
+                <p className="text-gray-600 text-sm mt-1">Cuando un cliente envíe un comprobante aparecerá aquí.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {transferencias.map(trans => {
+                  const fecha = new Date(trans.created_at).toLocaleDateString('es-MX', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                  });
+                  const hora = new Date(trans.created_at).toLocaleTimeString('es-MX', {
+                    hour: '2-digit', minute: '2-digit',
+                  });
+                  return (
+                    <div key={trans.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-blue-500/50 transition-all flex flex-col gap-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-white font-bold text-base leading-tight">{trans.cliente_nombre}</p>
+                          <p className="text-gray-500 text-xs mt-0.5">{fecha} · {hora}</p>
+                        </div>
+                        <span className="bg-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                          Pendiente
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between bg-blue-950/30 border border-blue-800/30 rounded-xl px-4 py-3">
+                        <div>
+                          <p className="text-blue-400 text-[10px] uppercase font-bold">Monto</p>
+                          <p className="text-white font-black text-xl">${Number(trans.monto).toLocaleString('es-MX')}</p>
+                        </div>
+                        <i className="fa-solid fa-receipt text-blue-700 text-2xl" />
+                      </div>
+
+                      <button
+                        onClick={() => { setSelectedTrans(trans); setTransLightbox(false); }}
+                        className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-image" />
+                        Ver Comprobante
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* ── MODAL ─────────────────────────────────────────────── */}
+      {/* ── MODAL PROSPECTOS ─────────────────────────────────── */}
       {selectedSolicitud && (
         <>
-          {/* Lightbox para fotos */}
           {lightbox && (
             <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
           )}
 
-          {/* Backdrop desktop */}
           <div
             className="hidden sm:block fixed inset-0 z-[109] bg-black/90 backdrop-blur-sm"
             onClick={() => setSelectedSolicitud(null)}
           />
 
-          {/* Modal container — full screen en móvil, centered card en desktop */}
           <div className="fixed inset-0 z-[110] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-4xl sm:rounded-2xl sm:border sm:border-red-900 sm:shadow-2xl bg-gray-950 flex flex-col overflow-hidden sm:max-h-[90vh]">
 
-            {/* ── HEADER MÓVIL con tabs ── */}
+            {/* Header móvil con tabs */}
             <div
               className="sm:hidden shrink-0 bg-gray-950 border-b border-gray-800"
               style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -194,7 +384,6 @@ export default function BandejaPage() {
                   <i className="fa-solid fa-xmark text-lg" />
                 </button>
 
-                {/* Tabs */}
                 <div className="flex bg-gray-800/80 rounded-xl p-1 gap-0.5">
                   <button
                     onClick={() => setMobileTab('expediente')}
@@ -220,15 +409,13 @@ export default function BandejaPage() {
               </div>
             </div>
 
-            {/* ── HANDLE DESKTOP ── */}
             <div className="hidden sm:flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 bg-gray-700 rounded-full" />
             </div>
 
-            {/* ── CONTENIDO PRINCIPAL ── */}
             <div className="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden">
 
-              {/* IZQUIERDA: Expediente (fotos) */}
+              {/* Expediente */}
               <div
                 className={`w-full sm:w-1/2 bg-gray-900 border-b sm:border-b-0 sm:border-r border-gray-800 overflow-y-auto
                   ${mobileTab === 'expediente' ? 'flex-1 min-h-0' : 'hidden sm:block sm:flex-none'}`}
@@ -283,22 +470,19 @@ export default function BandejaPage() {
                 </div>
               </div>
 
-              {/* DERECHA: Formulario */}
+              {/* Formulario */}
               <div
                 className={`w-full sm:w-1/2 flex flex-col min-h-0
                   ${mobileTab === 'configurar' ? 'flex-1' : 'hidden sm:flex'}`}
               >
-                {/* Header desktop del formulario */}
                 <div className="hidden sm:flex justify-between items-center px-4 pt-4 pb-2 shrink-0">
                   <h3 className="text-base font-bold text-white">Configurar Crédito</h3>
                   <button onClick={() => setSelectedSolicitud(null)} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
                 </div>
 
-                {/* Formulario scrollable */}
                 <div className="flex-1 overflow-y-auto px-4 pb-2">
                   <form id="formBandeja" onSubmit={handleAprobar} className="flex flex-col gap-4 py-4 sm:pt-1">
 
-                    {/* Mini info del prospecto en móvil */}
                     <div className="sm:hidden bg-gray-800/50 rounded-xl p-3">
                       <p className="text-white font-bold text-sm">{selectedSolicitud.nombre_prospecto}</p>
                       <p className="text-yellow-500 text-xs">Ingreso: ${selectedSolicitud.ingreso_mensual}</p>
@@ -363,7 +547,6 @@ export default function BandejaPage() {
                       />
                     )}
 
-                    {/* Botones dentro del form — solo desktop */}
                     <div className="hidden sm:flex gap-3 mt-2 pb-4">
                       <button
                         type="button"
@@ -385,7 +568,7 @@ export default function BandejaPage() {
               </div>
             </div>
 
-            {/* ── BARRA DE BOTONES MÓVIL — siempre visible en móvil ── */}
+            {/* Barra móvil */}
             <div
               className="sm:hidden shrink-0 flex gap-3 px-4 pt-3 bg-gray-950 border-t border-gray-800"
               style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
@@ -419,6 +602,122 @@ export default function BandejaPage() {
             </div>
 
           </div>
+        </>
+      )}
+
+      {/* ── MODAL TRANSFERENCIAS ─────────────────────────────── */}
+      {selectedTrans && (
+        <>
+          {/* Backdrop desktop */}
+          <div
+            className="hidden sm:block fixed inset-0 z-[109] bg-black/90 backdrop-blur-sm"
+            onClick={() => { setSelectedTrans(null); setTransLightbox(false); }}
+          />
+
+          {/* Modal */}
+          <div className="fixed inset-0 z-[110] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl sm:border sm:border-blue-900 sm:shadow-2xl bg-gray-950 flex flex-col overflow-hidden sm:max-h-[90vh]">
+
+            {/* Header */}
+            <div
+              className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-950"
+              style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+            >
+              <button
+                onClick={() => { setSelectedTrans(null); setTransLightbox(false); }}
+                className="w-9 h-9 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800 transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-lg" />
+              </button>
+              <div className="text-center">
+                <p className="text-white font-bold text-sm">{selectedTrans.cliente_nombre}</p>
+                <p className="text-blue-400 font-black text-base">${Number(selectedTrans.monto).toLocaleString('es-MX')}</p>
+              </div>
+              <button
+                onClick={() => setTransLightbox(!transLightbox)}
+                className="w-9 h-9 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800 transition-colors"
+                title="Ampliar"
+              >
+                <i className="fa-solid fa-expand text-sm" />
+              </button>
+            </div>
+
+            {/* Comprobante image */}
+            <div className="flex-1 min-h-0 flex items-center justify-center bg-black p-2 overflow-hidden">
+              <img
+                src={selectedTrans.comprobante_url}
+                alt="Comprobante de transferencia"
+                className="max-w-full max-h-full object-contain select-none"
+              />
+            </div>
+
+            {/* Info strip */}
+            <div className="shrink-0 px-4 py-2 border-t border-gray-800 flex items-center justify-between text-xs bg-gray-900">
+              <span className="text-gray-500">
+                {new Date(selectedTrans.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
+              {selectedTrans.pago_diario_id ? (
+                <span className="text-blue-400 font-medium">Pago vinculado</span>
+              ) : (
+                <span className="text-gray-600">Sin pago vinculado</span>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div
+              className="shrink-0 flex gap-3 px-4 pt-3 bg-gray-950 border-t border-gray-800"
+              style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+            >
+              <button
+                type="button"
+                onClick={handleRechazarTransferencia}
+                disabled={procesandoTrans}
+                className="w-1/3 py-3 border border-gray-700 text-gray-400 active:bg-gray-800 rounded-xl font-bold transition-colors text-sm disabled:opacity-40"
+              >
+                Rechazar
+              </button>
+              <button
+                type="button"
+                onClick={handleAprobarTransferencia}
+                disabled={procesandoTrans}
+                className="w-2/3 bg-emerald-600 active:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-900/40 transition-colors text-sm disabled:opacity-40 flex items-center justify-center gap-2"
+              >
+                {procesandoTrans ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-circle-check" />
+                    Aprobar Pago
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Full-screen lightbox cuando se amplía */}
+          {transLightbox && (
+            <div
+              className="fixed inset-0 z-[500] bg-black flex items-center justify-center"
+              style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+            >
+              <button
+                onClick={() => setTransLightbox(false)}
+                className="absolute top-4 left-4 flex items-center gap-2 text-white/80 hover:text-white z-10"
+                style={{ marginTop: 'env(safe-area-inset-top)' }}
+              >
+                <i className="fa-solid fa-arrow-left text-lg" />
+                <span className="text-sm font-semibold">Cerrar</span>
+              </button>
+              <img
+                src={selectedTrans.comprobante_url}
+                alt="Comprobante"
+                className="max-w-full max-h-full object-contain select-none"
+                onClick={() => setTransLightbox(false)}
+              />
+            </div>
+          )}
         </>
       )}
     </main>

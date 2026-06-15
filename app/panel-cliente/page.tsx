@@ -8,6 +8,11 @@ export default function PanelCliente() {
   const [loading, setLoading] = useState(true);
   const [pagoReciente, setPagoReciente] = useState(false);
   const [tabActivo, setTabActivo] = useState(0);
+  const [transferShow, setTransferShow] = useState(false);
+  const [transferFile, setTransferFile] = useState<File | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferSuccess, setTransferSuccess] = useState(false);
+  const [transferError, setTransferError] = useState('');
   const router = useRouter();
 
   const cargarDatos = useCallback(async (id: string) => {
@@ -59,6 +64,37 @@ export default function PanelCliente() {
     return () => { supabase.removeChannel(channel); };
   }, [router, cargarDatos]);
 
+  const handleTransferSubmit = async () => {
+    if (!transferFile || !credito) return;
+    if (transferFile.size > 8 * 1024 * 1024) {
+      setTransferError('El archivo es muy grande (máx 8 MB). Toma la foto con menor resolución.');
+      return;
+    }
+    setTransferLoading(true);
+    setTransferError('');
+    try {
+      const clienteId = localStorage.getItem('cliente_id');
+      if (!clienteId) throw new Error('No autenticado');
+      const fd = new FormData();
+      fd.append('cliente_id', clienteId);
+      fd.append('credito_id', credito.id);
+      if (proximoPendiente?.id) fd.append('pago_id', proximoPendiente.id);
+      fd.append('monto', String(Math.round(credito.monto_diario)));
+      fd.append('comprobante', transferFile);
+      const res = await fetch('/api/transferencias/crear', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error al enviar');
+      }
+      setTransferSuccess(true);
+      setTransferFile(null);
+    } catch (e: any) {
+      setTransferError(e.message);
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
   const cerrarSesion = () => {
     localStorage.removeItem('cliente_id');
     router.push('/login');
@@ -86,6 +122,7 @@ export default function PanelCliente() {
           const fechaPago = new Date(pago.fecha_esperada + 'T00:00:00');
           fechaPago.setHours(0, 0, 0, 0);
           return {
+            id: pago.id,
             numero: i + 1,
             fecha: fechaPago.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }),
             monto: credito.monto_diario,
@@ -284,6 +321,98 @@ export default function PanelCliente() {
                 </div>
               )}
             </div>
+
+            {/* Pagar por Transferencia */}
+            {credito && proximoPendiente && (
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+                <button
+                  onClick={() => { setTransferShow(!transferShow); setTransferSuccess(false); setTransferError(''); }}
+                  className="w-full flex items-center justify-between px-4 py-4 active:bg-gray-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-blue-500/20 rounded-xl flex items-center justify-center shrink-0">
+                      <i className="fa-solid fa-building-columns text-blue-400" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-white font-bold text-sm">Pagar por Transferencia</p>
+                      <p className="text-gray-500 text-[10px]">Envía tu comprobante al administrador</p>
+                    </div>
+                  </div>
+                  <i className={`fa-solid fa-chevron-${transferShow ? 'up' : 'down'} text-gray-500 text-sm`} />
+                </button>
+
+                {transferShow && (
+                  <div className="border-t border-gray-800 px-4 py-4 space-y-4">
+                    {transferSuccess ? (
+                      <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-xl p-5 text-center">
+                        <i className="fa-solid fa-circle-check text-emerald-400 text-3xl mb-2" />
+                        <p className="text-emerald-300 font-bold text-sm">¡Comprobante enviado!</p>
+                        <p className="text-gray-400 text-xs mt-1">El administrador revisará y aprobará tu pago pronto.</p>
+                        <button
+                          onClick={() => { setTransferSuccess(false); setTransferFile(null); setTransferError(''); }}
+                          className="mt-3 text-xs text-gray-500 underline"
+                        >
+                          Enviar otro comprobante
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-3">
+                          <p className="text-blue-400 text-[10px] font-bold uppercase mb-1">Este comprobante cubre</p>
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-white font-bold text-sm">Pago #{proximoPendiente.numero}</p>
+                              <p className="text-gray-400 text-[10px]">{proximoPendiente.fecha}</p>
+                            </div>
+                            <p className="text-blue-300 font-black text-lg">${Math.round(proximoPendiente.monto).toLocaleString('es-MX')}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-gray-400 text-xs font-medium block mb-1.5">Comprobante de transferencia</label>
+                          <label className={`flex flex-col items-center justify-center gap-2 w-full py-6 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                            transferFile ? 'border-emerald-500 bg-emerald-950/20' : 'border-gray-700 bg-gray-800/40'
+                          }`}>
+                            <i className={`fa-solid ${transferFile ? 'fa-circle-check text-emerald-400' : 'fa-image text-gray-500'} text-2xl`} />
+                            <span className="text-xs text-gray-400 text-center px-2 break-all">
+                              {transferFile ? transferFile.name : 'Toca para seleccionar foto o PDF'}
+                            </span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/*,application/pdf"
+                              onChange={e => { setTransferFile(e.target.files?.[0] || null); setTransferError(''); }}
+                            />
+                          </label>
+                        </div>
+
+                        {transferError && (
+                          <p className="text-red-400 text-xs bg-red-950/30 border border-red-800/40 rounded-lg px-3 py-2">{transferError}</p>
+                        )}
+
+                        <button
+                          onClick={handleTransferSubmit}
+                          disabled={!transferFile || transferLoading}
+                          className="w-full py-3 bg-blue-600 active:bg-blue-700 text-white font-bold rounded-xl text-sm disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                        >
+                          {transferLoading ? (
+                            <>
+                              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Enviando...
+                            </>
+                          ) : (
+                            <>
+                              <i className="fa-solid fa-paper-plane" />
+                              Enviar comprobante
+                            </>
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Calendario de pagos */}
             <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
