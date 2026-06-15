@@ -4,6 +4,36 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import { NotifBell } from '../../components/NotifBell';
 
+// Compresses an image to max 1400px and JPEG 82% before upload (~10-20x smaller)
+async function compressImage(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1400;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { resolve(file); return; }
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+          },
+          'image/jpeg', 0.82
+        );
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function PanelCliente() {
   const [datos, setDatos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -69,8 +99,8 @@ export default function PanelCliente() {
 
   const handleTransferSubmit = async () => {
     if (!transferFile || !credito) return;
-    if (transferFile.size > 8 * 1024 * 1024) {
-      setTransferError('El archivo es muy grande (máx 8 MB). Toma la foto con menor resolución.');
+    if (transferFile.size > 20 * 1024 * 1024) {
+      setTransferError('El archivo es muy grande (máx 20 MB).');
       return;
     }
     setTransferLoading(true);
@@ -78,6 +108,12 @@ export default function PanelCliente() {
     try {
       const clienteId = localStorage.getItem('cliente_id');
       if (!clienteId) throw new Error('No autenticado');
+
+      // Compress before upload: typical 5 MB photo → ~300 KB
+      const fileToSend = transferFile.type.startsWith('image/')
+        ? await compressImage(transferFile)
+        : transferFile;
+
       const fd = new FormData();
       fd.append('cliente_id', clienteId);
       fd.append('credito_id', credito.id);
@@ -86,7 +122,7 @@ export default function PanelCliente() {
       const moraEnvio = (credito.pagos_diarios || [])
         .filter((p: any) => p.fecha_esperada < hoyStr && !p.pagado).length * 50;
       fd.append('monto', String(Math.round(credito.monto_diario) + moraEnvio));
-      fd.append('comprobante', transferFile);
+      fd.append('comprobante', fileToSend);
       const res = await fetch('/api/transferencias/crear', { method: 'POST', body: fd });
       if (!res.ok) {
         const err = await res.json();

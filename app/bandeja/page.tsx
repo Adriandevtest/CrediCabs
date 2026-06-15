@@ -27,6 +27,7 @@ export default function BandejaPage() {
   const [selectedTrans, setSelectedTrans] = useState<any | null>(null);
   const [procesandoTrans, setProcesandoTrans] = useState(false);
   const [transLightbox, setTransLightbox] = useState(false);
+  const [transImgLoaded, setTransImgLoaded] = useState(false);
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -393,7 +394,7 @@ export default function BandejaPage() {
                       </div>
 
                       <button
-                        onClick={() => { setSelectedTrans({ ...trans, _cuota: cuota, _mora: mora, _diasAtraso: diasAtraso }); setTransLightbox(false); }}
+                        onClick={() => { setSelectedTrans({ ...trans, _cuota: cuota, _mora: mora, _diasAtraso: diasAtraso }); setTransLightbox(false); setTransImgLoaded(false); }}
                         className={`w-full text-white py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 ${mora > 0 ? 'bg-red-700 hover:bg-red-800 active:bg-red-900' : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'}`}
                       >
                         <i className="fa-solid fa-image" />
@@ -693,11 +694,21 @@ export default function BandejaPage() {
             </div>
 
             {/* Comprobante image */}
-            <div className="flex-1 min-h-0 flex items-center justify-center bg-black p-2 overflow-hidden">
+            <div className="flex-1 min-h-0 flex items-center justify-center bg-black p-2 overflow-hidden relative">
+              {!transImgLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
+                  <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-blue-400 text-xs">Cargando imagen...</p>
+                </div>
+              )}
               <img
+                key={selectedTrans.id}
                 src={selectedTrans.comprobante_url}
                 alt="Comprobante de transferencia"
-                className="max-w-full max-h-full object-contain select-none"
+                className="max-w-full max-h-full object-contain select-none transition-opacity duration-300"
+                style={{ opacity: transImgLoaded ? 1 : 0 }}
+                onLoad={() => setTransImgLoaded(true)}
+                onError={() => setTransImgLoaded(true)}
               />
             </div>
 
