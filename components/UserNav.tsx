@@ -1,6 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
+async function compressImage(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1200;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { resolve(file); return; }
+            resolve(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
+          },
+          'image/jpeg', 0.82
+        );
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
 
@@ -155,13 +184,13 @@ export default function UserNav() {
               type="file" 
               accept="image/*" 
               className="hidden" 
-              onChange={(e) => {
+              onChange={async (e) => {
                 if (e.target.files && e.target.files[0]) {
-                  const file = e.target.files[0];
-                  setAvatarFile(file);
-                  setPreviewUrl(URL.createObjectURL(file));
+                  const compressed = await compressImage(e.target.files[0]);
+                  setAvatarFile(compressed);
+                  setPreviewUrl(URL.createObjectURL(compressed));
                 }
-              }} 
+              }}
             />
             <p className="text-[10px] text-gray-500">Haz clic para cambiar foto</p>
           </div>
