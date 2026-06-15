@@ -37,8 +37,9 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
   useEffect(() => {
     if (!filterRol && !filterId) return;
     load();
+    const channelId = `notif_${storageKey}_${Math.random().toString(36).slice(2)}`;
     const ch = supabase
-      .channel(`notif_${storageKey}`)
+      .channel(channelId)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones' }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
