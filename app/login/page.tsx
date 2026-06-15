@@ -60,7 +60,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative overflow-hidden flex flex-col items-center justify-center" style={{ height: '100dvh' }}>
+    <div className="fixed inset-0 overflow-hidden flex flex-col items-center justify-center">
       {/* Fondo con position:absolute dentro del contenedor overflow-hidden — no se mueve en iOS */}
       <div
         className="absolute inset-0 -z-10 bg-cover bg-center bg-no-repeat"
