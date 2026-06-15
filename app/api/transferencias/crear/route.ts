@@ -52,6 +52,17 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
+    // Notify admin
+    const { data: prof } = await supabaseAdmin.from('profiles').select('nombre_completo').eq('id', clienteId).single();
+    const nombre = prof?.nombre_completo || 'Un cliente';
+    await supabaseAdmin.from('notificaciones').insert({
+      destinatario_rol: 'admin',
+      titulo: 'Nuevo comprobante de pago',
+      mensaje: `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`,
+      tipo: 'transferencia',
+      referencia_id: data.id,
+    }).then(() => {});
+
     return NextResponse.json({ success: true, transferencia: data });
   } catch (error: any) {
     console.error('Error en transferencias/crear:', error);

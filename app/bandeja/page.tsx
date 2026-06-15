@@ -115,6 +115,17 @@ export default function BandejaPage() {
         throw new Error(errorData.error || 'Error al crear cliente');
       }
       await supabase.from('solicitudes').update({ estado: 'aprobado' }).eq('id', selectedSolicitud.id);
+
+      // Notify asesor
+      if (selectedSolicitud.asesor_id) {
+        supabase.from('notificaciones').insert({
+          destinatario_id: selectedSolicitud.asesor_id,
+          titulo: '¡Solicitud aprobada! ✓',
+          mensaje: `${selectedSolicitud.nombre_prospecto} fue aprobado y convertido en cliente.`,
+          tipo: 'pago',
+        }).then(() => {});
+      }
+
       alert('¡Prospecto aprobado! Se ha convertido en cliente y su calendario de pagos está listo.');
       setSelectedSolicitud(null);
       cargarDatos();
@@ -129,6 +140,17 @@ export default function BandejaPage() {
     if (!confirm('¿Estás seguro de rechazar esta solicitud?')) return;
     try {
       await supabase.from('solicitudes').update({ estado: 'rechazado' }).eq('id', id);
+
+      // Notify asesor
+      if (selectedSolicitud?.asesor_id) {
+        supabase.from('notificaciones').insert({
+          destinatario_id: selectedSolicitud.asesor_id,
+          titulo: 'Solicitud rechazada',
+          mensaje: `${selectedSolicitud.nombre_prospecto} no fue aprobado en esta ocasión.`,
+          tipo: 'info',
+        }).then(() => {});
+      }
+
       setSelectedSolicitud(null);
       cargarDatos();
     } catch (error) {
@@ -696,27 +718,13 @@ export default function BandejaPage() {
             </div>
           </div>
 
-          {/* Full-screen lightbox cuando se amplía */}
+          {/* Lightbox con descarga */}
           {transLightbox && (
-            <div
-              className="fixed inset-0 z-[500] bg-black flex items-center justify-center"
-              style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-            >
-              <button
-                onClick={() => setTransLightbox(false)}
-                className="absolute top-4 left-4 flex items-center gap-2 text-white/80 hover:text-white z-10"
-                style={{ marginTop: 'env(safe-area-inset-top)' }}
-              >
-                <i className="fa-solid fa-arrow-left text-lg" />
-                <span className="text-sm font-semibold">Cerrar</span>
-              </button>
-              <img
-                src={selectedTrans.comprobante_url}
-                alt="Comprobante"
-                className="max-w-full max-h-full object-contain select-none"
-                onClick={() => setTransLightbox(false)}
-              />
-            </div>
+            <ImageLightbox
+              src={selectedTrans.comprobante_url}
+              alt={`Comprobante — ${selectedTrans.cliente_nombre}`}
+              onClose={() => setTransLightbox(false)}
+            />
           )}
         </>
       )}

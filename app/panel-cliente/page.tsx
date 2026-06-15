@@ -2,12 +2,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
+import { NotifBell } from '../../components/NotifBell';
 
 export default function PanelCliente() {
   const [datos, setDatos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [pagoReciente, setPagoReciente] = useState(false);
   const [tabActivo, setTabActivo] = useState(0);
+  const [clienteId, setClienteId] = useState<string | null>(null);
   const [transferShow, setTransferShow] = useState(false);
   const [transferFile, setTransferFile] = useState<File | null>(null);
   const [transferLoading, setTransferLoading] = useState(false);
@@ -50,6 +52,7 @@ export default function PanelCliente() {
   useEffect(() => {
     const id = localStorage.getItem('cliente_id');
     if (!id) { router.push('/login'); return; }
+    setClienteId(id);
     cargarDatos(id);
 
     const channel = supabase
@@ -157,6 +160,7 @@ export default function PanelCliente() {
                 ✓ Pago registrado
               </span>
             )}
+            <NotifBell filterId={clienteId ?? undefined} storageKey="notif_seen_cliente" />
             <button
               onClick={cerrarSesion}
               className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800 transition-colors"

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Settings, LogOut } from 'lucide-react';
+import { NotifBell } from './NotifBell';
 
 export default function UserNav() {
   const [profile, setProfile] = useState<any>(null);
@@ -84,6 +85,13 @@ export default function UserNav() {
   if (!profile) return <div className="h-10 w-10 rounded-full bg-gray-800 animate-pulse" />;
 
   return (
+    <div className="flex items-center gap-2">
+      {profile.rol === 'admin' && (
+        <NotifBell filterRol="admin" storageKey="notif_seen_admin" />
+      )}
+      {profile.rol === 'asesor' && (
+        <NotifBell filterId={profile.id} storageKey={`notif_seen_${profile.id}`} />
+      )}
     <Dialog>
       <Popover>
         <PopoverTrigger asChild>
@@ -167,5 +175,6 @@ export default function UserNav() {
         </form>
       </DialogContent>
     </Dialog>
+    </div>
   );
 }

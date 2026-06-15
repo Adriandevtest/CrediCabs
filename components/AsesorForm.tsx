@@ -55,6 +55,15 @@ export default function AsesorForm({ userId }: { userId?: string | null }) {
       }]);
 
       if (error) throw error;
+
+      // Notify admin
+      supabase.from('notificaciones').insert({
+        destinatario_rol: 'admin',
+        titulo: 'Nueva solicitud recibida',
+        mensaje: `${formData.nombre} — $${Number(formData.monto_solicitado).toLocaleString('es-MX')}`,
+        tipo: 'solicitud',
+      }).then(() => {});
+
       alert("✅ Solicitud enviada al administrador con éxito.");
       setFormData({ nombre: '', telefono: '', direccion: '', ocupacion: '', ingresos: '', monto_solicitado: '' });
     } catch (err: any) {
