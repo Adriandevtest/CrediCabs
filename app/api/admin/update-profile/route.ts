@@ -35,13 +35,15 @@ export async function POST(request: NextRequest) {
       if (uploadError) throw uploadError;
 
       const { data } = supabaseAdmin.storage.from('expedientes').getPublicUrl(filePath);
-      avatarUrl = data.publicUrl;
+      // Cache-bust so browsers don't serve stale image from the same path
+      avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
     }
 
     // Construir los datos de actualización
     const updateData: Record<string, string> = { nombre_completo: nombre };
     if (avatarUrl) {
       updateData.avatar_url = avatarUrl;
+      updateData.foto_url   = avatarUrl; // keep both fields in sync
     }
 
     const { error: updateError } = await supabaseAdmin

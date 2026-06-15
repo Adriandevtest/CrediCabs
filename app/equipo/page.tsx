@@ -10,6 +10,12 @@ import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } 
 import { AnimatedStaffForm } from '../../components/AnimatedStaffForm';
 import { LumaSpin } from '../../components/luma-spin';
 
+const getIniciales = (nombre: string) => {
+  if (!nombre) return '?';
+  const p = nombre.trim().split(/\s+/);
+  return p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : p[0].substring(0, 2).toUpperCase();
+};
+
 export default function EquipoPage() {
   const [equipo, setEquipo] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,8 +177,18 @@ export default function EquipoPage() {
                 {equipo.map((miembro) => (
                   <div key={miembro.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-yellow-500 transition-colors flex flex-col gap-3 shadow-lg">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${miembro.rol === 'asesor' ? 'border-red-900 text-red-500' : 'border-yellow-700 text-yellow-500'}`}>
-                        <i className={`fa-solid ${miembro.rol === 'asesor' ? 'fa-briefcase' : 'fa-motorcycle'}`}></i>
+                      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 shrink-0 ${miembro.rol === 'asesor' ? 'border-red-700' : 'border-yellow-700'}`}>
+                        {(miembro.avatar_url || miembro.foto_url) ? (
+                          <img
+                            src={miembro.avatar_url || miembro.foto_url}
+                            alt={miembro.nombre_completo}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className={`w-full h-full flex items-center justify-center text-sm font-black ${miembro.rol === 'asesor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                            {getIniciales(miembro.nombre_completo)}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <h3 className="text-lg font-bold text-white">{miembro.nombre_completo}</h3>
@@ -202,6 +218,29 @@ export default function EquipoPage() {
           
           {selectedMember && (
             <div className="space-y-4">
+              {/* Avatar + nombre */}
+              <div className="flex items-center gap-4">
+                <div className={`w-16 h-16 rounded-full overflow-hidden border-2 shrink-0 ${selectedMember.rol === 'asesor' ? 'border-red-700' : 'border-yellow-700'}`}>
+                  {(selectedMember.avatar_url || selectedMember.foto_url) ? (
+                    <img
+                      src={selectedMember.avatar_url || selectedMember.foto_url}
+                      alt={selectedMember.nombre_completo}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className={`w-full h-full flex items-center justify-center text-lg font-black ${selectedMember.rol === 'asesor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                      {getIniciales(selectedMember.nombre_completo)}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-white font-bold text-base leading-tight">{selectedMember.nombre_completo}</p>
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${selectedMember.rol === 'asesor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                    {selectedMember.rol}
+                  </span>
+                </div>
+              </div>
+
               {/* Sección de datos visibles */}
               <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 text-sm space-y-3">
                 <div>

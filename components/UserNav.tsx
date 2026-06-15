@@ -20,6 +20,7 @@ export default function UserNav() {
   const [subiendo, setSubiendo] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [guardadoOk, setGuardadoOk] = useState(false);
   const router = useRouter();
 
   const fetchUser = async () => {
@@ -72,13 +73,17 @@ export default function UserNav() {
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Error al actualizar el perfil.');
 
-      alert('Perfil actualizado con éxito');
+      // Update local state immediately — no need to wait for a refetch
+      const newAvatar = resData.avatar_url || previewUrl;
+      setProfile((prev: any) => ({ ...prev, nombre_completo: nuevoNombre, avatar_url: newAvatar }));
+      setPreviewUrl(newAvatar);
       setAvatarFile(null);
-      fetchUser();
-    } catch (e: any) { 
-      alert('Error al actualizar: ' + e.message); 
-    } finally { 
-      setSubiendo(false); 
+      setGuardadoOk(true);
+      setTimeout(() => setGuardadoOk(false), 3000);
+    } catch (e: any) {
+      alert('Error al actualizar: ' + e.message);
+    } finally {
+      setSubiendo(false);
     }
   };
 
@@ -169,6 +174,9 @@ export default function UserNav() {
               className="bg-gray-900 border-gray-800 text-white"
             />
           </div>
+          {guardadoOk && (
+            <p className="text-emerald-400 text-xs text-center font-semibold">✓ Perfil actualizado correctamente</p>
+          )}
           <Button type="submit" className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold" disabled={subiendo}>
             {subiendo ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
