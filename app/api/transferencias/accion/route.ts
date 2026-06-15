@@ -14,19 +14,34 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch transferencia for notifications
+    // Fetch transferencia completa para notificaciones y fallback
     const { data: trans } = await supabaseAdmin
       .from('transferencias')
-      .select('cliente_id, monto')
+      .select('cliente_id, credito_id, monto')
       .eq('id', transferenciaId)
       .single();
 
     if (accion === 'aprobar') {
-      if (pagoId) {
+      // Resolver qué pago marcar: usar pago_diario_id si existe,
+      // si no, buscar el primer pendiente del crédito (fallback robusto)
+      let pagoEfectivoId = pagoId || null;
+      if (!pagoEfectivoId && trans?.credito_id) {
+        const { data: nextPago } = await supabaseAdmin
+          .from('pagos_diarios')
+          .select('id')
+          .eq('credito_id', trans.credito_id)
+          .eq('pagado', false)
+          .order('numero_dia', { ascending: true })
+          .limit(1)
+          .single();
+        pagoEfectivoId = nextPago?.id || null;
+      }
+
+      if (pagoEfectivoId) {
         const { error: pagoError } = await supabaseAdmin
           .from('pagos_diarios')
           .update({ pagado: true })
-          .eq('id', pagoId);
+          .eq('id', pagoEfectivoId);
         if (pagoError) throw pagoError;
       }
       const { error } = await supabaseAdmin
