@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '../lib/supabase';
 
@@ -10,8 +11,38 @@ type Ubicacion = {
   lng: number;
   precision_metros: number | null;
   updated_at: string;
-  profiles: { nombre_completo: string; rol: string } | null;
+  profiles: { nombre_completo: string; rol: string; avatar_url?: string; foto_url?: string } | null;
 };
+
+function crearIconoFoto(u: Ubicacion, color: string, online: boolean, seleccionado: boolean): L.DivIcon {
+  const foto = u.profiles?.avatar_url || u.profiles?.foto_url || '';
+  const nombre = u.profiles?.nombre_completo || 'U';
+  const inicial = nombre[0].toUpperCase();
+  const size = seleccionado ? 48 : 38;
+  const border = seleccionado ? '#facc15' : (online ? color : '#6b7280');
+  const bw = seleccionado ? 3 : 2;
+  const dotColor = online ? '#34d399' : '#6b7280';
+
+  const inner = foto
+    ? `<img src="${foto}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" />`
+    : `<div style="width:100%;height:100%;border-radius:50%;background:${color}22;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:${Math.round(size * 0.38)}px;color:${color};font-family:system-ui;">${inicial}</div>`;
+
+  const html = `
+    <div style="position:relative;width:${size}px;height:${size}px;">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:${bw}px solid ${border};box-shadow:0 2px 10px rgba(0,0,0,0.6);">
+        ${inner}
+      </div>
+      <span style="position:absolute;bottom:0;right:0;width:10px;height:10px;background:${dotColor};border-radius:50%;border:2px solid #111827;"></span>
+    </div>`;
+
+  return L.divIcon({
+    html,
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2) - 4],
+  });
+}
 
 function AjustarVista({ ubicaciones }: { ubicaciones: Ubicacion[] }) {
   const map = useMap();
@@ -54,7 +85,7 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
   const cargarUbicaciones = async () => {
     const { data } = await supabase
       .from('ubicaciones')
-      .select('user_id, lat, lng, precision_metros, updated_at, profiles(nombre_completo, rol)')
+      .select('user_id, lat, lng, precision_metros, updated_at, profiles(nombre_completo, rol, avatar_url, foto_url)')
       .order('updated_at', { ascending: false });
     if (data) setUbicaciones(data as unknown as Ubicacion[]);
     setCargando(false);
@@ -176,27 +207,33 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
                 const color = COLORES[rol] || '#ef4444';
                 const online = enLinea(u.updated_at);
                 const esSeleccionado = seleccionado === u.user_id;
+                const foto = u.profiles?.avatar_url || u.profiles?.foto_url || '';
                 return (
-                  <CircleMarker
+                  <Marker
                     key={u.user_id}
-                    center={[u.lat, u.lng]}
-                    radius={online ? (esSeleccionado ? 14 : 10) : 7}
-                    pathOptions={{
-                      color: esSeleccionado ? '#facc15' : (online ? color : '#6b7280'),
-                      fillColor: online ? color : '#374151',
-                      fillOpacity: 0.92,
-                      weight: esSeleccionado ? 3 : 2,
-                    }}
+                    position={[u.lat, u.lng]}
+                    icon={crearIconoFoto(u, color, online, esSeleccionado)}
                     eventHandlers={{ click: () => setSeleccionado(u.user_id === seleccionado ? null : u.user_id) }}
                   >
                     <Popup>
-                      <div style={{ minWidth: 170, fontFamily: 'system-ui, sans-serif', lineHeight: 1.5 }}>
-                        <p style={{ fontWeight: 800, fontSize: 15, margin: '0 0 2px' }}>
-                          {u.profiles?.nombre_completo || 'Usuario'}
-                        </p>
-                        <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>
-                          {rol}
-                        </p>
+                      <div style={{ minWidth: 180, fontFamily: 'system-ui, sans-serif', lineHeight: 1.5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          {foto ? (
+                            <img src={foto} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${color}` }} />
+                          ) : (
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: color + '22', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, color }}>
+                              {(u.profiles?.nombre_completo || 'U')[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <p style={{ fontWeight: 800, fontSize: 14, margin: 0, lineHeight: 1.2 }}>
+                              {u.profiles?.nombre_completo || 'Usuario'}
+                            </p>
+                            <p style={{ color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                              {rol}
+                            </p>
+                          </div>
+                        </div>
                         <p style={{ fontSize: 12, margin: '0 0 3px' }}>
                           <span style={{ color: online ? '#34d399' : '#f87171', fontWeight: 700 }}>
                             {online ? '● En línea' : '○ Offline'}
@@ -213,7 +250,7 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
                         </p>
                       </div>
                     </Popup>
-                  </CircleMarker>
+                  </Marker>
                 );
               })}
             </MapContainer>
@@ -245,12 +282,31 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
                       onClick={() => setSeleccionado(u.user_id === seleccionado ? null : u.user_id)}
                       className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors hover:bg-gray-800/60 ${esSeleccionado ? 'bg-gray-800' : ''}`}
                     >
-                      {/* Avatar con color de rol */}
-                      <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 border-2"
-                        style={{ backgroundColor: online ? color + '33' : '#1f2937', borderColor: online ? color : '#374151', color: online ? color : '#6b7280' }}
-                      >
-                        {(u.profiles?.nombre_completo || 'U')[0].toUpperCase()}
+                      {/* Avatar con foto o inicial */}
+                      <div className="relative shrink-0">
+                        <div
+                          className="w-9 h-9 rounded-full overflow-hidden border-2"
+                          style={{ borderColor: online ? color : '#374151' }}
+                        >
+                          {(u.profiles?.avatar_url || u.profiles?.foto_url) ? (
+                            <img
+                              src={u.profiles?.avatar_url || u.profiles?.foto_url}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="w-full h-full flex items-center justify-center font-black text-sm"
+                              style={{ backgroundColor: online ? color + '22' : '#1f2937', color: online ? color : '#6b7280' }}
+                            >
+                              {(u.profiles?.nombre_completo || 'U')[0].toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <span
+                          className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-gray-900"
+                          style={{ background: online ? '#34d399' : '#6b7280' }}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-sm font-semibold truncate leading-tight">
