@@ -29,17 +29,31 @@ export default function BandejaPage() {
   const [transLightbox, setTransLightbox] = useState(false);
   const [transImgLoaded, setTransImgLoaded] = useState(false);
 
-  useEffect(() => { cargarDatos(); }, []);
+  useEffect(() => {
+    cargarDatos();
+    cargarTransferencias();
+
+    // Real-time: nuevas solicitudes
+    const chSol = supabase
+      .channel('bandeja_solicitudes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, cargarDatos)
+      .subscribe();
+
+    // Real-time: nuevas transferencias o cambios de estado
+    const chTrans = supabase
+      .channel('bandeja_transferencias')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transferencias' }, cargarTransferencias)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chSol);
+      supabase.removeChannel(chTrans);
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedSolicitud) setMobileTab('expediente');
   }, [selectedSolicitud?.id]);
-
-  useEffect(() => {
-    if (bandejaTab === 'transferencias' && transferencias.length === 0 && !loadingTrans) {
-      cargarTransferencias();
-    }
-  }, [bandejaTab]);
 
   const cargarDatos = async () => {
     setLoading(true);
