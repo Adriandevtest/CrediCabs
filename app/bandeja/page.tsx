@@ -39,20 +39,15 @@ export default function BandejaPage() {
 
     const uid = Math.random().toString(36).slice(2);
 
-    // Suscripción a notificaciones (FUNCIONA garantizado)
-    // Cuando llega una notif de transferencia para admin → recargar lista
+    // Suscripción a notificaciones — payload.new puede venir vacío por RLS,
+    // así que recargamos en cualquier INSERT sin revisar el contenido
     const chNotif = supabase
       .channel(`bandeja_notif_${uid}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notificaciones' },
-        (payload) => {
-          const n = payload.new as any;
-          if (n?.destinatario_rol === 'admin' && n?.tipo === 'transferencia') {
-            cargarTransRef.current();
-          }
-          if (n?.destinatario_rol === 'admin' && n?.tipo === 'solicitud') {
-            cargarDatosRef.current();
-          }
+        () => {
+          cargarTransRef.current();
+          cargarDatosRef.current();
         }
       )
       .subscribe();
@@ -64,9 +59,13 @@ export default function BandejaPage() {
         () => cargarTransRef.current())
       .subscribe();
 
+    // Polling de respaldo cada 12 segundos por si fallan las suscripciones
+    const poll = setInterval(() => cargarTransRef.current(), 12000);
+
     return () => {
       supabase.removeChannel(chNotif);
       supabase.removeChannel(chTrans);
+      clearInterval(poll);
     };
   }, []);
 
