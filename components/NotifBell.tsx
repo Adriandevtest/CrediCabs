@@ -70,8 +70,9 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
     if (!filterRol && !filterId) return;
     load();
 
+    const chName = `notif_${storageKey}_${Math.random().toString(36).slice(2)}`;
     const ch = supabase
-      .channel(`notif_${storageKey}`)
+      .channel(chName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones' },
         (payload) => {
           const n = payload.new as any;
