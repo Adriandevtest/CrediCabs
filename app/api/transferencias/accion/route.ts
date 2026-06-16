@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { sendPushToCliente } from '@/lib/sendPush';
+import { sendPushToCliente, sendPushToUserIds } from '@/lib/sendPush';
 
 export async function POST(request: Request) {
   try {
@@ -15,12 +15,14 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch transferencia completa para notificaciones y fallback
+    // Fetch transferencia + asesor del crédito
     const { data: trans } = await supabaseAdmin
       .from('transferencias')
-      .select('cliente_id, credito_id, monto')
+      .select('cliente_id, credito_id, monto, creditos(creado_por)')
       .eq('id', transferenciaId)
       .single();
+
+    const asesorId: string | null = (trans as any)?.creditos?.creado_por ?? null;
 
     if (accion === 'aprobar') {
       // Resolver qué pago marcar: usar pago_diario_id si existe,
@@ -61,6 +63,7 @@ export async function POST(request: Request) {
           tipo: 'pago',
         });
         sendPushToCliente(trans.cliente_id, '✅ ¡Pago confirmado!', msgAprobado).catch(() => {});
+        if (asesorId) sendPushToUserIds([asesorId], '✅ Pago aprobado', `Pago de $${Number(trans.monto).toLocaleString('es-MX')} aprobado.`).catch(() => {});
       }
     } else if (accion === 'rechazar') {
       const { error } = await supabaseAdmin
@@ -79,6 +82,7 @@ export async function POST(request: Request) {
           tipo: 'info',
         });
         sendPushToCliente(trans.cliente_id, '❌ Comprobante rechazado', msgRechazado).catch(() => {});
+        if (asesorId) sendPushToUserIds([asesorId], '❌ Comprobante rechazado', `Un comprobante de $${Number(trans.monto).toLocaleString('es-MX')} fue rechazado.`).catch(() => {});
       }
     } else {
       return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });

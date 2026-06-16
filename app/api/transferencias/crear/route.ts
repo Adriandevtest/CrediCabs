@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { sendPushToAdmins } from '@/lib/sendPush';
+import { sendPushToAdmins, sendPushToUserIds } from '@/lib/sendPush';
 
 export async function POST(request: Request) {
   try {
@@ -53,20 +53,38 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    // Notify admin
+    // Datos del cliente y asesor del crédito
     const { data: prof } = await supabaseAdmin.from('profiles').select('nombre_completo').eq('id', clienteId).single();
     const nombre = prof?.nombre_completo || 'Un cliente';
-    const msgAdmin = `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`;
+    const msgNuevo = `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`;
+
+    // Buscar asesor que creó el crédito
+    const { data: credito } = await supabaseAdmin.from('creditos').select('creado_por').eq('id', creditoId).single();
+    const asesorId: string | null = credito?.creado_por ?? null;
+
+    // Notificación in-app al admin
     await supabaseAdmin.from('notificaciones').insert({
       destinatario_rol: 'admin',
       titulo: 'Nuevo comprobante de pago',
-      mensaje: msgAdmin,
+      mensaje: msgNuevo,
       tipo: 'transferencia',
       referencia_id: data.id,
     }).then(() => {});
 
-    // Push nativa a todos los admins
-    sendPushToAdmins('💳 Nuevo comprobante de pago', msgAdmin).catch(() => {});
+    // Notificación in-app al asesor
+    if (asesorId) {
+      await supabaseAdmin.from('notificaciones').insert({
+        destinatario_id: asesorId,
+        titulo: 'Nuevo comprobante de pago',
+        mensaje: msgNuevo,
+        tipo: 'transferencia',
+        referencia_id: data.id,
+      }).then(() => {});
+    }
+
+    // Push nativa: admins + asesor
+    sendPushToAdmins('💳 Nuevo comprobante', msgNuevo).catch(() => {});
+    if (asesorId) sendPushToUserIds([asesorId], '💳 Nuevo comprobante', msgNuevo).catch(() => {});
 
     return NextResponse.json({ success: true, transferencia: data });
   } catch (error: any) {
