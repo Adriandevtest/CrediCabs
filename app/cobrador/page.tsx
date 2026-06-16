@@ -246,6 +246,15 @@ export default function CobradorPage() {
       if (entry) {
         setCompletados((prev) => [...prev, entry]);
         setRuta((prev) => prev.filter((c) => c._entryKey !== entryKey));
+
+        // Notificar admins que este cliente pagó
+        const clienteNombre = (entry.profiles as any)?.nombre_completo || `Cliente ${entry.numero_cliente}`;
+        const monto = entry._credito?.monto_diario;
+        fetch('/api/notifications/pago-registrado', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clienteNombre, monto }),
+        }).catch(() => {});
       }
     } catch (e: any) {
       alert('Error al registrar pago: ' + e.message);

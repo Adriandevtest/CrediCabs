@@ -58,9 +58,13 @@ export async function POST(request: Request) {
     const nombre = prof?.nombre_completo || 'Un cliente';
     const msgNuevo = `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`;
 
-    // Buscar asesor que creó el crédito
-    const { data: credito } = await supabaseAdmin.from('creditos').select('creado_por').eq('id', creditoId).single();
+    // Buscar asesor que creó el crédito y cobrador asignado al cliente
+    const [{ data: credito }, { data: clienteRow }] = await Promise.all([
+      supabaseAdmin.from('creditos').select('creado_por').eq('id', creditoId).single(),
+      supabaseAdmin.from('clientes').select('cobrador_asignado_id').eq('id', clienteId).single(),
+    ]);
     const asesorId: string | null = credito?.creado_por ?? null;
+    const cobradorId: string | null = clienteRow?.cobrador_asignado_id ?? null;
 
     // Notificación in-app al admin
     await supabaseAdmin.from('notificaciones').insert({
@@ -82,9 +86,10 @@ export async function POST(request: Request) {
       }).then(() => {});
     }
 
-    // Push nativa: admins + asesor
+    // Push nativa: admins + asesor + cobrador
     sendPushToAdmins('💳 Nuevo comprobante', msgNuevo).catch(() => {});
-    if (asesorId) sendPushToUserIds([asesorId], '💳 Nuevo comprobante', msgNuevo).catch(() => {});
+    const staffIds = [asesorId, cobradorId].filter(Boolean) as string[];
+    if (staffIds.length) sendPushToUserIds(staffIds, '💳 Nuevo comprobante', msgNuevo).catch(() => {});
 
     return NextResponse.json({ success: true, transferencia: data });
   } catch (error: any) {
