@@ -33,15 +33,15 @@ export default function BandejaPage() {
     cargarDatos();
     cargarTransferencias();
 
-    // Real-time: nuevas solicitudes
+    const uid = Math.random().toString(36).slice(2);
+
     const chSol = supabase
-      .channel('bandeja_solicitudes')
+      .channel(`bandeja_sol_${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, cargarDatos)
       .subscribe();
 
-    // Real-time: nuevas transferencias o cambios de estado
     const chTrans = supabase
-      .channel('bandeja_transferencias')
+      .channel(`bandeja_trans_${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transferencias' }, cargarTransferencias)
       .subscribe();
 
