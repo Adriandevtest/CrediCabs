@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { sendPushToAdmins } from '@/lib/sendPush';
 
 export async function POST(request: Request) {
   try {
@@ -55,13 +56,17 @@ export async function POST(request: Request) {
     // Notify admin
     const { data: prof } = await supabaseAdmin.from('profiles').select('nombre_completo').eq('id', clienteId).single();
     const nombre = prof?.nombre_completo || 'Un cliente';
+    const msgAdmin = `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`;
     await supabaseAdmin.from('notificaciones').insert({
       destinatario_rol: 'admin',
       titulo: 'Nuevo comprobante de pago',
-      mensaje: `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`,
+      mensaje: msgAdmin,
       tipo: 'transferencia',
       referencia_id: data.id,
     }).then(() => {});
+
+    // Push nativa a todos los admins
+    sendPushToAdmins('💳 Nuevo comprobante de pago', msgAdmin).catch(() => {});
 
     return NextResponse.json({ success: true, transferencia: data });
   } catch (error: any) {

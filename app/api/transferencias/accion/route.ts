@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { sendPushToCliente } from '@/lib/sendPush';
 
 export async function POST(request: Request) {
   try {
@@ -52,12 +53,14 @@ export async function POST(request: Request) {
 
       // Notify cliente
       if (trans?.cliente_id) {
+        const msgAprobado = `Tu pago de $${Number(trans.monto).toLocaleString('es-MX')} fue verificado y aprobado.`;
         await supabaseAdmin.from('notificaciones').insert({
           destinatario_id: trans.cliente_id,
           titulo: '¡Pago confirmado! ✓',
-          mensaje: `Tu pago de $${Number(trans.monto).toLocaleString('es-MX')} fue verificado y aprobado.`,
+          mensaje: msgAprobado,
           tipo: 'pago',
         });
+        sendPushToCliente(trans.cliente_id, '✅ ¡Pago confirmado!', msgAprobado).catch(() => {});
       }
     } else if (accion === 'rechazar') {
       const { error } = await supabaseAdmin
@@ -68,12 +71,14 @@ export async function POST(request: Request) {
 
       // Notify cliente
       if (trans?.cliente_id) {
+        const msgRechazado = 'Tu comprobante no pudo ser verificado. Por favor contacta a tu cobrador.';
         await supabaseAdmin.from('notificaciones').insert({
           destinatario_id: trans.cliente_id,
           titulo: 'Comprobante rechazado',
-          mensaje: 'Tu comprobante no pudo ser verificado. Por favor contacta a tu cobrador.',
+          mensaje: msgRechazado,
           tipo: 'info',
         });
+        sendPushToCliente(trans.cliente_id, '❌ Comprobante rechazado', msgRechazado).catch(() => {});
       }
     } else {
       return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
