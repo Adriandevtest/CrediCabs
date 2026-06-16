@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
@@ -29,24 +29,43 @@ export default function BandejaPage() {
   const [transLightbox, setTransLightbox] = useState(false);
   const [transImgLoaded, setTransImgLoaded] = useState(false);
 
+  // Refs para evitar stale closures en callbacks de realtime
+  const cargarTransRef = useRef<() => void>(() => {});
+  const cargarDatosRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     cargarDatos();
     cargarTransferencias();
 
     const uid = Math.random().toString(36).slice(2);
 
-    const chSol = supabase
-      .channel(`bandeja_sol_${uid}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, cargarDatos)
+    // Suscripción a notificaciones (FUNCIONA garantizado)
+    // Cuando llega una notif de transferencia para admin → recargar lista
+    const chNotif = supabase
+      .channel(`bandeja_notif_${uid}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notificaciones' },
+        (payload) => {
+          const n = payload.new as any;
+          if (n?.destinatario_rol === 'admin' && n?.tipo === 'transferencia') {
+            cargarTransRef.current();
+          }
+          if (n?.destinatario_rol === 'admin' && n?.tipo === 'solicitud') {
+            cargarDatosRef.current();
+          }
+        }
+      )
       .subscribe();
 
+    // Suscripción directa a transferencias (respaldo)
     const chTrans = supabase
       .channel(`bandeja_trans_${uid}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transferencias' }, cargarTransferencias)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transferencias' },
+        () => cargarTransRef.current())
       .subscribe();
 
     return () => {
-      supabase.removeChannel(chSol);
+      supabase.removeChannel(chNotif);
       supabase.removeChannel(chTrans);
     };
   }, []);
@@ -100,6 +119,12 @@ export default function BandejaPage() {
       setLoadingTrans(false);
     }
   };
+
+  // Mantener refs con la versión más reciente (patrón estándar para callbacks en realtime)
+  useEffect(() => {
+    cargarTransRef.current = cargarTransferencias;
+    cargarDatosRef.current = cargarDatos;
+  });
 
   const handleAprobar = async (e: React.FormEvent) => {
     e.preventDefault();
