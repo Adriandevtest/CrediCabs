@@ -19,7 +19,7 @@ function playNotifSound() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const play = (freq: number, start: number, dur: number) => {
-      const osc = ctx.createOscillator();
+      const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -37,82 +37,84 @@ function playNotifSound() {
 }
 
 export function NotifBell({ filterRol, filterId, storageKey }: Props) {
-  const [notifs, setNotifs]   = useState<any[]>([]);
-  const [open, setOpen]       = useState(false);
-  const [unread, setUnread]   = useState(0);
-  const [toast, setToast]     = useState<{ titulo: string; mensaje: string } | null>(null);
+  const [notifs,   setNotifs]   = useState<any[]>([]);
+  const [open,     setOpen]     = useState(false);
+  const [unread,   setUnread]   = useState(0);
+  const [toast,    setToast]    = useState<{ titulo: string; mensaje: string } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const knownIds    = useRef<Set<string>>(new Set());
   const initialized = useRef(false);
+  const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Cargar notificaciones ────────────────────────────────────
-  const load = useCallback(async () => {
-    if (!filterRol && !filterId) return;
-    let q = supabase.from('notificaciones').select('*').order('created_at', { ascending: false }).limit(40);
-    if (filterRol) q = q.eq('destinatario_rol', filterRol);
-    if (filterId)  q = q.eq('destinatario_id', filterId);
-    const { data } = await q;
-    if (!data) return;
-    setNotifs(data);
-    const lastSeen = parseInt(localStorage.getItem(storageKey) || '0');
-    setUnread(data.filter(n => new Date(n.created_at).getTime() > lastSeen).length);
-  }, [filterRol, filterId, storageKey]);
-
-  // ── Mostrar toast ────────────────────────────────────────────
+  // ── Mostrar toast ──────────────────────────────────────────────
   function showToast(titulo: string, mensaje: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ titulo, mensaje });
     toastTimer.current = setTimeout(() => setToast(null), 5000);
   }
 
-  // ── Suscripción real-time ────────────────────────────────────
+  // ── Consulta a la BD y detecta nuevas ─────────────────────────
+  const load = useCallback(async (checkNew = false) => {
+    if (!filterRol && !filterId) return;
+
+    let q = supabase
+      .from('notificaciones')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (filterRol) q = q.eq('destinatario_rol', filterRol);
+    if (filterId)  q = q.eq('destinatario_id',  filterId);
+
+    const { data } = await q;
+    if (!data) return;
+
+    // Detectar notificaciones genuinamente nuevas
+    if (checkNew && initialized.current) {
+      const nuevas = data.filter(n => !knownIds.current.has(n.id));
+      if (nuevas.length > 0) {
+        playNotifSound();
+        showToast(nuevas[0].titulo, nuevas[0].mensaje);
+      }
+    }
+
+    // Actualizar set de IDs conocidos
+    knownIds.current = new Set(data.map((n: any) => n.id));
+
+    setNotifs(data);
+    const lastSeen = parseInt(localStorage.getItem(storageKey) || '0');
+    setUnread(data.filter((n: any) => new Date(n.created_at).getTime() > lastSeen).length);
+  }, [filterRol, filterId, storageKey]);
+
+  // ── Suscripción real-time ──────────────────────────────────────
   useEffect(() => {
     if (!filterRol && !filterId) return;
-    load();
+
+    // Carga inicial
+    load(false).then(() => { initialized.current = true; });
 
     const chName = `notif_${storageKey}_${Math.random().toString(36).slice(2)}`;
     const ch = supabase
       .channel(chName)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones' },
-        (payload) => {
-          const n = payload.new as any;
-          // Verificar si la notif es para este usuario/rol
-          const esParaMi =
-            (filterRol && n.destinatario_rol === filterRol) ||
-            (filterId  && n.destinatario_id  === filterId);
-
-          if (!esParaMi) return;
-
-          // Actualizar estado directamente con el payload (sin re-query)
-          setNotifs(prev => [n, ...prev].slice(0, 40));
-          setUnread(prev => prev + 1);
-
-          // Sonido + toast solo después de la carga inicial
-          if (initialized.current) {
-            playNotifSound();
-            showToast(n.titulo, n.mensaje);
-          }
-        }
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notificaciones' },
+        () => load(true)   // re-consulta siempre (no depende de payload.new)
       )
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notificaciones' },
-        (payload) => {
-          const deleted = payload.old as any;
-          setNotifs(prev => prev.filter(n => n.id !== deleted.id));
-        }
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notificaciones' },
+        () => load(false)
       )
       .subscribe();
 
-    // Marcar como inicializado después de la primera carga
-    const t = setTimeout(() => { initialized.current = true; }, 1500);
-
     return () => {
       supabase.removeChannel(ch);
-      clearTimeout(t);
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, [load, filterRol, filterId, storageKey]);
 
-  // ── Abrir/cerrar ─────────────────────────────────────────────
+  // ── Abrir / cerrar campana ─────────────────────────────────────
   const handleToggle = () => {
     const next = !open;
     setOpen(next);
@@ -122,10 +124,11 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
     }
   };
 
-  // ── Eliminar una notificación ────────────────────────────────
+  // ── Eliminar una ───────────────────────────────────────────────
   const eliminarUna = async (id: string) => {
     setDeleting(id);
     setNotifs(prev => prev.filter(n => n.id !== id));
+    knownIds.current.delete(id);
     await fetch('/api/notifications/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -134,10 +137,11 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
     setDeleting(null);
   };
 
-  // ── Eliminar todas ───────────────────────────────────────────
+  // ── Eliminar todas ─────────────────────────────────────────────
   const eliminarTodas = async () => {
     setNotifs([]);
     setUnread(0);
+    knownIds.current.clear();
     await fetch('/api/notifications/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -149,7 +153,7 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
 
   return (
     <>
-      {/* Toast banner ─────────────────────────────────────────── */}
+      {/* Toast ──────────────────────────────────────────────────── */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[600] w-[92vw] max-w-sm
                         bg-gray-900 border border-yellow-500/30 rounded-2xl shadow-2xl
@@ -163,14 +167,16 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
             <p className="text-white text-xs font-bold leading-tight">{toast.titulo}</p>
             <p className="text-gray-400 text-[10px] mt-0.5 leading-snug">{toast.mensaje}</p>
           </div>
-          <button onClick={() => setToast(null)}
-                  className="text-gray-600 hover:text-gray-300 shrink-0 mt-0.5 transition-colors">
+          <button
+            onClick={() => setToast(null)}
+            className="text-gray-600 hover:text-gray-300 shrink-0 mt-0.5 transition-colors"
+          >
             <i className="fa-solid fa-xmark text-xs" />
           </button>
         </div>
       )}
 
-      {/* Campana ─────────────────────────────────────────────── */}
+      {/* Campana ────────────────────────────────────────────────── */}
       <div className="relative">
         <button
           onClick={handleToggle}
@@ -183,7 +189,7 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
           {unread > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white
                              text-[9px] font-black rounded-full flex items-center justify-center
-                             px-0.5 leading-none animate-in zoom-in duration-200">
+                             px-0.5 leading-none">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -217,8 +223,10 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
                     <p className="text-gray-500 text-sm">Sin notificaciones</p>
                   </div>
                 ) : notifs.map(n => (
-                  <div key={n.id}
-                       className="px-4 py-3 flex gap-3 hover:bg-gray-800/30 transition-colors group">
+                  <div
+                    key={n.id}
+                    className="px-4 py-3 flex gap-3 hover:bg-gray-800/30 transition-colors group"
+                  >
                     <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center shrink-0 mt-0.5">
                       <i className={`fa-solid ${TIPO_ICON[n.tipo] ?? TIPO_ICON.info} text-xs`} />
                     </div>
