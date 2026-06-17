@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Páginas donde no se muestra ningún nav
-const OCULTAR_EN = ['/login', '/panel-cliente', '/mapa'];
+const OCULTAR_EN = ['/login', '/panel-cliente', '/mapa', '/descargar'];
 
 const ASESOR_TABS = [
   { hash: '',              label: 'Nueva',       icon: 'fa-solid fa-file-circle-plus' },
