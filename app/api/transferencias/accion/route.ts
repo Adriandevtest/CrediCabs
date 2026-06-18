@@ -4,7 +4,7 @@ import { sendPushToCliente, sendPushToUserIds } from '@/lib/sendPush';
 
 export async function POST(request: Request) {
   try {
-    const { transferenciaId, pagoId, accion } = await request.json();
+    const { transferenciaId, pagoId, accion, mora = 0 } = await request.json();
 
     if (!transferenciaId || !accion) {
       return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
@@ -43,15 +43,31 @@ export async function POST(request: Request) {
       if (pagoEfectivoId) {
         const { error: pagoError } = await supabaseAdmin
           .from('pagos_diarios')
-          .update({ pagado: true })
+          .update({ pagado: true, mora: mora ?? 0 })
           .eq('id', pagoEfectivoId);
         if (pagoError) throw pagoError;
       }
+
       const { error } = await supabaseAdmin
         .from('transferencias')
         .update({ estado: 'aprobado' })
         .eq('id', transferenciaId);
       if (error) throw error;
+
+      // Verificar si era el último pago pendiente y liquidar el crédito
+      if (trans?.credito_id) {
+        const { count } = await supabaseAdmin
+          .from('pagos_diarios')
+          .select('id', { count: 'exact', head: true })
+          .eq('credito_id', trans.credito_id)
+          .eq('pagado', false);
+        if (count === 0) {
+          await supabaseAdmin
+            .from('creditos')
+            .update({ estado: 'liquidado' })
+            .eq('id', trans.credito_id);
+        }
+      }
 
       // Notify cliente
       if (trans?.cliente_id) {

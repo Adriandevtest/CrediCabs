@@ -94,7 +94,7 @@ export default function BandejaPage() {
     try {
       const { data: transData } = await supabase
         .from('transferencias')
-        .select('*, creditos(monto_diario)')
+        .select('*, creditos(monto_diario, pagos_diarios(fecha_esperada, pagado))')
         .eq('estado', 'pendiente')
         .order('created_at', { ascending: false });
 
@@ -105,10 +105,21 @@ export default function BandejaPage() {
           .select('id, nombre_completo')
           .in('id', ids);
         const profMap = new Map((profData || []).map((p: any) => [p.id, p]));
-        setTransferencias(transData.map((t: any) => ({
-          ...t,
-          cliente_nombre: profMap.get(t.cliente_id)?.nombre_completo || 'Cliente',
-        })));
+
+        const today = new Date().toISOString().split('T')[0];
+        setTransferencias(transData.map((t: any) => {
+          const pagos: any[] = t.creditos?.pagos_diarios || [];
+          const diasAtrasados = pagos.filter(
+            (p: any) => p.fecha_esperada < today && !p.pagado
+          ).length;
+          const moraCalculada = diasAtrasados * 50;
+          return {
+            ...t,
+            cliente_nombre: profMap.get(t.cliente_id)?.nombre_completo || 'Cliente',
+            _moraReal: moraCalculada,
+            _diasAtraso: diasAtrasados,
+          };
+        }));
       } else {
         setTransferencias([]);
       }
@@ -207,6 +218,7 @@ export default function BandejaPage() {
         body: JSON.stringify({
           transferenciaId: selectedTrans.id,
           pagoId: selectedTrans.pago_diario_id || null,
+          mora: selectedTrans._mora ?? 0,
           accion: 'aprobar',
         }),
       });
@@ -383,8 +395,8 @@ export default function BandejaPage() {
                     hour: '2-digit', minute: '2-digit',
                   });
                   const cuota = trans.creditos?.monto_diario || 0;
-                  const mora = cuota > 0 ? Math.max(0, Math.round(trans.monto) - Math.round(cuota)) : 0;
-                  const diasAtraso = mora > 0 ? Math.round(mora / 50) : 0;
+                  const mora = trans._moraReal ?? 0;
+                  const diasAtraso = trans._diasAtraso ?? 0;
                   return (
                     <div key={trans.id} className={`bg-gray-900 border rounded-xl p-5 hover:border-opacity-80 transition-all flex flex-col gap-4 ${mora > 0 ? 'border-red-800/50 hover:border-red-600/60' : 'border-gray-800 hover:border-blue-500/50'}`}>
                       <div className="flex justify-between items-start">
@@ -398,7 +410,7 @@ export default function BandejaPage() {
                           </span>
                           {mora > 0 && (
                             <span className="bg-red-500/20 text-red-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                              +mora
+                              {diasAtraso} día{diasAtraso !== 1 ? 's' : ''} mora
                             </span>
                           )}
                         </div>
@@ -408,22 +420,28 @@ export default function BandejaPage() {
                         {mora > 0 ? (
                           <>
                             <div className="flex justify-between items-center mb-1.5">
-                              <p className="text-gray-400 text-[10px] uppercase font-bold">Cuota</p>
+                              <p className="text-gray-400 text-[10px] uppercase font-bold">Cuota diaria</p>
                               <p className="text-gray-300 font-bold text-sm">${Math.round(cuota).toLocaleString('es-MX')}</p>
                             </div>
                             <div className="flex justify-between items-center mb-2">
-                              <p className="text-red-400 text-[10px] uppercase font-bold">Mora ({diasAtraso} día{diasAtraso !== 1 ? 's' : ''})</p>
+                              <p className="text-red-400 text-[10px] uppercase font-bold">Mora ({diasAtraso} día{diasAtraso !== 1 ? 's' : ''} × $50)</p>
                               <p className="text-red-400 font-bold text-sm">+${mora.toLocaleString('es-MX')}</p>
                             </div>
                             <div className="pt-1.5 border-t border-red-800/40 flex justify-between items-center">
-                              <p className="text-red-300 text-[10px] uppercase font-bold">Total recibido</p>
-                              <p className="text-white font-black text-xl">${Number(trans.monto).toLocaleString('es-MX')}</p>
+                              <p className="text-red-300 text-[10px] uppercase font-bold">Total a cubrir</p>
+                              <p className="text-white font-black text-xl">${(Math.round(cuota) + mora).toLocaleString('es-MX')}</p>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <p className="text-gray-500 text-[10px] uppercase font-bold">Enviado por cliente</p>
+                              <p className={`font-bold text-sm ${Number(trans.monto) >= Math.round(cuota) + mora ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                                ${Number(trans.monto).toLocaleString('es-MX')}
+                              </p>
                             </div>
                           </>
                         ) : (
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-blue-400 text-[10px] uppercase font-bold">Monto</p>
+                              <p className="text-blue-400 text-[10px] uppercase font-bold">Monto enviado</p>
                               <p className="text-white font-black text-xl">${Number(trans.monto).toLocaleString('es-MX')}</p>
                             </div>
                             <i className="fa-solid fa-receipt text-blue-700 text-2xl" />

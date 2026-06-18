@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '../../lib/supabase';
+import { calcularMora, MORA_POR_DIA } from '../../lib/mora';
 import UserNav from '../../components/UserNav';
 import GeoTracker from '../../components/GeoTracker';
 
@@ -46,9 +47,7 @@ export default function CobradorPage() {
   const today = new Date().toISOString().split('T')[0];
   const fechaHoy = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  const MORA_POR_DIA = 50;
-  const calcularMora = (pagos: any[]) =>
-    (pagos || []).filter((p: any) => p.fecha_esperada < today && !p.pagado).length * MORA_POR_DIA;
+  // calcularMora importada de lib/mora.ts
 
   // ────────────────────────────────────────────
   // Inicialización
@@ -241,6 +240,16 @@ export default function CobradorPage() {
         .eq('id', nextPayment.id);
 
       if (updateError) throw updateError;
+
+      // Si no quedan más pagos pendientes, marcar el crédito como liquidado
+      const { count: pendientes } = await supabase
+        .from('pagos_diarios')
+        .select('id', { count: 'exact', head: true })
+        .eq('credito_id', creditoId)
+        .eq('pagado', false);
+      if (pendientes === 0) {
+        await supabase.from('creditos').update({ estado: 'liquidado' }).eq('id', creditoId);
+      }
 
       const entry = ruta.find((c) => c._entryKey === entryKey);
       if (entry) {

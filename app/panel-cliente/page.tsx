@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import { NotifBell } from '../../components/NotifBell';
+import { diasDeMora, MORA_POR_DIA } from '../../lib/mora';
 
 // Compresses an image to max 1400px and JPEG 82% before upload (~10-20x smaller)
 async function compressImage(file: File): Promise<File> {
@@ -178,7 +179,7 @@ export default function PanelCliente() {
   const pagosPendientes = cronograma.length - pagosPagados;
   const porcentaje = cronograma.length > 0 ? Math.round((pagosPagados / cronograma.length) * 100) : 0;
   const pagosAtrasados = cronograma.filter(p => p.atrasado);
-  const moraTotal = pagosAtrasados.length * 50;
+  const moraTotal = diasDeMora(credito?.pagos_diarios || []) * MORA_POR_DIA;
   const proximoPendiente = cronograma.find(p => !p.pagado);
   const totalAPagar = credito ? credito.monto_total + (credito.interes_total || 0) : 0;
 
