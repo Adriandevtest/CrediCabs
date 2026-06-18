@@ -195,8 +195,10 @@ export function CinematicHero({ metricValue = 1247, className, ...props }: Cinem
   }, []);
 
   useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-    // El layout tiene overflow-hidden en body y scroll dentro de <main>
+    // Solo correr la animación en móvil
+    if (window.innerWidth >= 768) return;
+
+    const isMobile = true;
     const scroller = document.querySelector("main") as HTMLElement | null;
     const vh = scroller ? scroller.clientHeight : window.innerHeight;
 
