@@ -29,13 +29,13 @@ export default function DescargarPage() {
   return (
     <div className="bg-gray-950 text-white font-sans">
 
-      {/* ── Hero cinemático — solo móvil ───────────────────────── */}
-      <div className="md:hidden">
+      {/* ── Hero cinemático — solo desktop ─────────────────────── */}
+      <div className="hidden md:block">
         <CinematicHero metricValue={1247} />
       </div>
 
-      {/* ── Hero estático — solo desktop ────────────────────────── */}
-      <div className="hidden md:block">
+      {/* ── Hero estático — solo móvil ──────────────────────────── */}
+      <div className="md:hidden">
         <nav className="fixed top-0 inset-x-0 z-50 bg-gray-950/80 backdrop-blur border-b border-gray-900">
           <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2.5">

@@ -195,10 +195,10 @@ export function CinematicHero({ metricValue = 1247, className, ...props }: Cinem
   }, []);
 
   useEffect(() => {
-    // Solo correr la animación en móvil
-    if (window.innerWidth >= 768) return;
+    // Solo correr la animación en desktop
+    if (window.innerWidth < 768) return;
 
-    const isMobile = true;
+    const isMobile = false;
     const scroller = document.querySelector("main") as HTMLElement | null;
     const vh = scroller ? scroller.clientHeight : window.innerHeight;
 
