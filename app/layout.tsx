@@ -4,6 +4,7 @@ import "./globals.css";
 import MobileNav from "@/components/MobileNav";
 import { BackPrevention } from "@/components/BackPrevention";
 import { PushNotificationInit } from "@/components/PushNotificationInit";
+import { AuthRefreshHandler } from "@/components/AuthRefreshHandler";
 import { cn } from "@/lib/utils";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
@@ -51,6 +52,7 @@ export default function RootLayout({
       */}
       <body className="h-screen flex flex-col bg-gray-950 overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <BackPrevention />
+        <AuthRefreshHandler />
         <PushNotificationInit />
         <main className="flex-grow overflow-y-auto md:pb-0 w-full" style={{ paddingBottom: 'max(6rem, calc(5rem + env(safe-area-inset-bottom, 0px)))' }}>
           {children}

@@ -28,7 +28,17 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session }, error } = await supabase.auth.getSession();
+
+  // Refresh token inválido o expirado → limpiar cookies y mandar al login
+  if (error) {
+    const loginUrl = new URL('/login', request.url);
+    const clearResponse = NextResponse.redirect(loginUrl);
+    request.cookies.getAll()
+      .filter(c => c.name.startsWith('sb-'))
+      .forEach(c => clearResponse.cookies.delete(c.name));
+    return clearResponse;
+  }
 
   // Lógica de protección
   const { pathname } = request.nextUrl;
