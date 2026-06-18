@@ -283,7 +283,7 @@ export default function CobradorPage() {
   const totalDia = [...ruta, ...completados].reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
   const totalCobrado = completados.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
   const totalPendiente = ruta.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
-  const morasPendientes = ruta.reduce((a, c) => a + calcularMora(c._credito?.pagos_diarios), 0);
+  const morasPendientes = ruta.reduce((a, c) => a + calcularMora(c._credito?.pagos_diarios || []), 0);
   const progreso = ruta.length + completados.length > 0
     ? Math.round((completados.length / (ruta.length + completados.length)) * 100)
     : 0;
@@ -388,9 +388,10 @@ export default function CobradorPage() {
                     <div className="flex flex-col gap-3 mb-6">
                       {ruta.map((cliente) => {
                         const credito = cliente._credito;
+                        if (!credito) return null;
                         const isProcessing = procesandoPago === cliente._creditoId;
                         const atrasado = credito?.estado === 'atrasado';
-                        const mora = calcularMora(credito.pagos_diarios);
+                        const mora = calcularMora(credito.pagos_diarios || []);
                         const totalACobrar = Math.round(credito.monto_diario) + mora;
 
                         const pagosOrdenados =[...(credito.pagos_diarios || [])].sort(

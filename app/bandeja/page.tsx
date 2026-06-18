@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { MORA_POR_DIA } from '../../lib/mora';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
@@ -112,7 +113,7 @@ export default function BandejaPage() {
           const diasAtrasados = pagos.filter(
             (p: any) => p.fecha_esperada < today && !p.pagado
           ).length;
-          const moraCalculada = diasAtrasados * 50;
+          const moraCalculada = diasAtrasados * MORA_POR_DIA;
           return {
             ...t,
             cliente_nombre: profMap.get(t.cliente_id)?.nombre_completo || 'Cliente',

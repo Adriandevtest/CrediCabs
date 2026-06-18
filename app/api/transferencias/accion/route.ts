@@ -61,7 +61,7 @@ export async function POST(request: Request) {
           .select('id', { count: 'exact', head: true })
           .eq('credito_id', trans.credito_id)
           .eq('pagado', false);
-        if (count === 0) {
+        if (count !== null && count === 0) {
           await supabaseAdmin
             .from('creditos')
             .update({ estado: 'liquidado' })
