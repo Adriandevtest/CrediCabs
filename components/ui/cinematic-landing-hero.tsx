@@ -196,11 +196,14 @@ export function CinematicHero({ metricValue = 1247, className, ...props }: Cinem
 
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
+    // El layout tiene overflow-hidden en body y scroll dentro de <main>
+    const scroller = document.querySelector("main") as HTMLElement | null;
+    const vh = scroller ? scroller.clientHeight : window.innerHeight;
 
     const ctx = gsap.context(() => {
       gsap.set(".text-track", { autoAlpha: 0, y: 60, scale: 0.85, filter: "blur(20px)", rotationX: -20 });
       gsap.set(".text-days", { autoAlpha: 1, clipPath: "inset(0 100% 0 0)" });
-      gsap.set(".main-card", { y: window.innerHeight + 200, autoAlpha: 1 });
+      gsap.set(".main-card", { y: vh + 200, autoAlpha: 1 });
       gsap.set([".card-left-text", ".card-right-text", ".mockup-scroll-wrapper", ".floating-badge", ".phone-widget"], { autoAlpha: 0 });
       gsap.set(".cta-wrapper", { autoAlpha: 0, scale: 0.8, filter: "blur(30px)" });
 
@@ -212,6 +215,7 @@ export function CinematicHero({ metricValue = 1247, className, ...props }: Cinem
       const scrollTl = gsap.timeline({
         scrollTrigger: {
           trigger: containerRef.current,
+          scroller: scroller ?? window,
           start: "top top",
           end: "+=7000",
           pin: true,
@@ -249,7 +253,7 @@ export function CinematicHero({ metricValue = 1247, className, ...props }: Cinem
           duration: 1.8,
         }, "pullback")
         .to(".cta-wrapper", { scale: 1, filter: "blur(0px)", ease: "expo.inOut", duration: 1.8 }, "pullback")
-        .to(".main-card", { y: -window.innerHeight - 300, ease: "power3.in", duration: 1.5 });
+        .to(".main-card", { y: -vh - 300, ease: "power3.in", duration: 1.5 });
     }, containerRef);
 
     return () => ctx.revert();
