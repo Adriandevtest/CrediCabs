@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { CinematicHero } from '@/components/ui/cinematic-landing-hero';
 
 export const metadata: Metadata = {
   title: 'Descargar CrediCabs',
@@ -18,7 +19,7 @@ const features = [
 ];
 
 const steps = [
-  { n: '1', text: 'Descarga el archivo APK pulsando el botón de abajo.' },
+  { n: '1', text: 'Descarga el archivo APK pulsando el botón de arriba.' },
   { n: '2', text: 'Abre el archivo desde tus notificaciones o el explorador de archivos.' },
   { n: '3', text: 'Si tu celular lo pide, permite instalar desde "fuentes desconocidas" en Ajustes.' },
   { n: '4', text: 'Instala la app, inicia sesión y empieza a gestionar tu cobranza.' },
@@ -26,107 +27,10 @@ const steps = [
 
 export default function DescargarPage() {
   return (
-    <div className="min-h-full bg-gray-950 text-white font-sans">
+    <div className="bg-gray-950 text-white font-sans">
 
-      {/* ── Navbar ─────────────────────────────────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 bg-gray-950/80 backdrop-blur border-b border-gray-900">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-yellow-500 flex items-center justify-center">
-              <i className="fa-solid fa-taxi text-gray-950 text-sm" />
-            </div>
-            <span className="font-black text-lg tracking-tight">Credi<span className="text-yellow-400">Cabs</span></span>
-          </div>
-          <a
-            href={APK_URL}
-            download="credicabs.apk"
-            className="hidden sm:flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-gray-950
-                       font-bold text-sm px-4 py-2 rounded-xl transition-colors"
-          >
-            <i className="fa-solid fa-download" />
-            Descargar
-          </a>
-        </div>
-      </nav>
-
-      {/* ── Hero ───────────────────────────────────────────────── */}
-      <section className="pt-32 pb-20 px-6 text-center">
-        <div className="max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20
-                          text-yellow-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
-            <i className="fa-solid fa-circle text-[6px] animate-pulse" />
-            Disponible para Android
-          </div>
-
-          <h1 className="text-4xl sm:text-5xl font-black leading-tight mb-4">
-            Tu cobranza,<br />
-            <span className="text-yellow-400">en la palma de tu mano</span>
-          </h1>
-
-          <p className="text-gray-400 text-lg leading-relaxed mb-10">
-            CrediCabs es la app de gestión de créditos diseñada para cobradores, asesores y administradores.
-            Rápida, confiable y con notificaciones en tiempo real.
-          </p>
-
-          <a
-            href={APK_URL}
-            download="credicabs.apk"
-            className="inline-flex items-center gap-3 bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-300
-                       text-gray-950 font-black text-lg px-8 py-4 rounded-2xl transition-all
-                       shadow-lg shadow-yellow-500/20 hover:shadow-yellow-400/30 hover:-translate-y-0.5"
-          >
-            <i className="fa-solid fa-download text-xl" />
-            Descargar APK
-            <span className="text-xs font-bold opacity-60 ml-1">v1.0 · 15.6 MB</span>
-          </a>
-
-          <p className="text-gray-600 text-xs mt-4">
-            <i className="fa-brands fa-android mr-1" />
-            Android 7.0 o superior · Gratis
-          </p>
-        </div>
-
-        {/* Mockup visual */}
-        <div className="mt-16 relative max-w-xs mx-auto">
-          <div className="w-48 h-80 mx-auto bg-gray-900 rounded-[2.5rem] border-4 border-gray-800
-                          shadow-2xl shadow-black/60 flex flex-col overflow-hidden">
-            <div className="bg-gray-900 pt-6 pb-3 px-4 flex items-center justify-between shrink-0">
-              <span className="text-[10px] text-gray-500">9:41</span>
-              <div className="flex gap-1">
-                <i className="fa-solid fa-signal text-[8px] text-gray-500" />
-                <i className="fa-solid fa-wifi text-[8px] text-gray-500" />
-                <i className="fa-solid fa-battery-full text-[8px] text-gray-500" />
-              </div>
-            </div>
-            <div className="flex-1 bg-gray-950 px-3 py-2 flex flex-col gap-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-black text-white">CrediCabs</span>
-                <div className="w-4 h-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                  <i className="fa-solid fa-bell text-yellow-400 text-[6px]" />
-                </div>
-              </div>
-              {[85, 60, 40, 75].map((w, i) => (
-                <div key={i} className="bg-gray-900 rounded-xl p-2 flex gap-2 items-center">
-                  <div className="w-6 h-6 rounded-full bg-yellow-500/10 flex items-center justify-center shrink-0">
-                    <i className="fa-solid fa-user text-yellow-400 text-[7px]" />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className={`h-1.5 bg-gray-700 rounded-full`} style={{ width: `${w}%` }} />
-                    <div className="h-1 bg-gray-800 rounded-full w-1/2" />
-                  </div>
-                </div>
-              ))}
-              <div className="mt-auto flex justify-around py-1 border-t border-gray-900">
-                {['fa-house','fa-users','fa-map','fa-gear'].map((ic, i) => (
-                  <i key={i} className={`fa-solid ${ic} text-[9px] ${i === 0 ? 'text-yellow-400' : 'text-gray-600'}`} />
-                ))}
-              </div>
-            </div>
-          </div>
-          {/* Glow */}
-          <div className="absolute inset-0 -z-10 blur-3xl opacity-20 bg-yellow-400 rounded-full scale-75" />
-        </div>
-      </section>
+      {/* ── Hero cinemático (ocupa 100vh, pina el scroll internamente) ── */}
+      <CinematicHero metricValue={1247} />
 
       {/* ── Funcionalidades ────────────────────────────────────── */}
       <section className="py-20 px-6 border-t border-gray-900">
