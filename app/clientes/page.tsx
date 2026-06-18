@@ -6,13 +6,17 @@ import { supabase } from '../../lib/supabase';
 import TableWithDialog from '../../components/TableWithDialog';
 import UserNav from '../../components/UserNav';
 import RegisterClientForm from '../../components/RegisterClientForm';
+import ClientesEnMora from '../../components/ClientesEnMora';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+
+type Vista = 'todos' | 'mora';
 
 export default function ClientesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [cobradores, setCobradores] = useState<any[]>([]);
+  const [vista, setVista] = useState<Vista>('todos');
 
   useEffect(() => {
     cargarCobradores();
@@ -44,6 +48,23 @@ export default function ClientesPage() {
         </div>
       </header>
 
+      {/* Tab switcher móvil */}
+      <div className="md:hidden flex gap-2 px-4 pt-3 pb-1">
+        <button
+          onClick={() => setVista('todos')}
+          className={`flex-1 py-2 rounded-xl text-xs font-black transition-colors ${vista === 'todos' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+        >
+          Todos
+        </button>
+        <button
+          onClick={() => setVista('mora')}
+          className={`flex-1 py-2 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 ${vista === 'mora' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+        >
+          <i className="fa-solid fa-triangle-exclamation text-[10px]" />
+          En Mora
+        </button>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 md:px-0">
 
         {/* Navegación — solo desktop */}
@@ -64,6 +85,22 @@ export default function ClientesPage() {
           <div>
             <h1 className="text-4xl font-black text-white">Directorio <span className="text-red-600">General</span></h1>
             <p className="text-gray-400 text-base tracking-widest uppercase">Clientes Activos</p>
+            {/* Tab switcher desktop */}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => setVista('todos')}
+                className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors ${vista === 'todos' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              >
+                Todos los clientes
+              </button>
+              <button
+                onClick={() => setVista('mora')}
+                className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors flex items-center gap-1.5 ${vista === 'mora' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              >
+                <i className="fa-solid fa-triangle-exclamation text-[10px]" />
+                Clientes en mora
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-4 w-full md:w-auto items-center">
@@ -118,8 +155,11 @@ export default function ClientesPage() {
           </div>
         </div>
 
-        {/* Instancia de tu tabla pasando el buscador como prop */}
-        <TableWithDialog searchQuery={searchQuery} />     
+        {/* Contenido según tab */}
+        {vista === 'todos'
+          ? <TableWithDialog searchQuery={searchQuery} />
+          : <ClientesEnMora searchQuery={searchQuery} />
+        }
 
       </div>
     </main>
