@@ -32,9 +32,10 @@ export async function middleware(request: NextRequest) {
 
   // Lógica de protección
   const { pathname } = request.nextUrl;
-  if (!session && 
-      !pathname.startsWith('/login') && 
-      !pathname.startsWith('/panel-cliente') && 
+  if (!session &&
+      !pathname.startsWith('/login') &&
+      !pathname.startsWith('/panel-cliente') &&
+      !pathname.startsWith('/descargar') &&
       !pathname.startsWith('/api')
   ) {
     return NextResponse.redirect(new URL('/login', request.url));
