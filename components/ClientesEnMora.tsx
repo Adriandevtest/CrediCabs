@@ -25,13 +25,14 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
 
   useEffect(() => {
     cargar();
+    // Refresca automáticamente cada 2 minutos por si el cobrador registra pagos
+    const interval = setInterval(cargar, 2 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const cargar = async () => {
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
-
       const { data, error } = await supabase
         .from('clientes')
         .select(`
@@ -62,8 +63,8 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
 
       for (const cliente of data || []) {
         const creditos: any[] = (cliente as any).creditos || [];
-        // Solo créditos activos
-        const creditoActivo = creditos.find((c: any) => c.estado === 'activo');
+        // Créditos activos o marcados como atrasados (ambos pueden tener mora)
+        const creditoActivo = creditos.find((c: any) => c.estado === 'activo' || c.estado === 'atrasado');
         if (!creditoActivo) continue;
 
         const pagos: { fecha_esperada: string; pagado: boolean }[] =
@@ -118,6 +119,18 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
 
   return (
     <div className="space-y-5">
+
+      {/* Refresh manual */}
+      <div className="flex justify-end">
+        <button
+          onClick={cargar}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40"
+        >
+          <i className={`fa-solid fa-rotate-right text-[10px] ${loading ? 'animate-spin' : ''}`} />
+          Actualizar
+        </button>
+      </div>
 
       {/* Resumen */}
       <div className="grid grid-cols-3 gap-3">

@@ -119,10 +119,7 @@ export default function PanelCliente() {
       fd.append('cliente_id', clienteId);
       fd.append('credito_id', credito.id);
       if (proximoPendiente?.id) fd.append('pago_id', proximoPendiente.id);
-      const hoyStr = new Date().toISOString().split('T')[0];
-      const moraEnvio = (credito.pagos_diarios || [])
-        .filter((p: any) => p.fecha_esperada < hoyStr && !p.pagado).length * 50;
-      fd.append('monto', String(Math.round(credito.monto_diario) + moraEnvio));
+      fd.append('monto', String(Math.round(credito.monto_diario) + moraTotal));
       fd.append('comprobante', fileToSend);
       const res = await fetch('/api/transferencias/crear', { method: 'POST', body: fd });
       if (!res.ok) {

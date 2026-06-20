@@ -44,7 +44,7 @@ export default function CobradorPage() {
   const [detalleCliente, setDetalleCliente] = useState<any | null>(null);
 
   const router = useRouter();
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('en-CA');
   const fechaHoy = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 
   // calcularMora importada de lib/mora.ts
