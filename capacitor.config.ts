@@ -11,17 +11,18 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
   android: {
-    backgroundColor: '#030712',
+    backgroundColor: '#000000',
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 1500,
-      backgroundColor: '#030712',
+      launchShowDuration: 1800,
+      backgroundColor: '#000000',
       showSpinner: false,
+      androidSplashResourceName: 'splash_screen',
     },
     StatusBar: {
       style: 'DARK',
-      backgroundColor: '#030712',
+      backgroundColor: '#000000',
     },
   },
 };
