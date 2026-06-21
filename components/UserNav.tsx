@@ -42,6 +42,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Settings, LogOut } from 'lucide-react';
 import { NotifBell } from './NotifBell';
+import CambiarPinModal from './CambiarPinModal';
 
 export default function UserNav() {
   const [profile, setProfile] = useState<any>(null);
@@ -50,6 +51,7 @@ export default function UserNav() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [guardadoOk, setGuardadoOk] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
   const router = useRouter();
 
   const fetchUser = async () => {
@@ -210,8 +212,23 @@ export default function UserNav() {
             {subiendo ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
         </form>
+
+        {/* Cambiar PIN — solo admin */}
+        {profile.rol === 'admin' && (
+          <div className="mt-4 pt-4 border-t border-gray-800">
+            <button
+              onClick={() => setPinModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-300 hover:text-white text-xs font-bold py-2.5 rounded-xl transition-colors"
+            >
+              <i className="fa-solid fa-key text-yellow-500" />
+              Cambiar PIN de Seguridad
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
+
+    <CambiarPinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)} />
     </div>
   );
 }
