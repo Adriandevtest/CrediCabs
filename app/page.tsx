@@ -25,6 +25,7 @@ export default function Home() {
   const [totalPagosEsperados, setTotalPagosEsperados] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [capitalFlash, setCapitalFlash] = useState(false);
   const router = useRouter();
 
   const hoy = new Date();
@@ -36,7 +37,11 @@ export default function Home() {
 
     const channel = supabase
       .channel('admin-dashboard-rt')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, (payload) => {
+        if ((payload.new as any)?.pagado) {
+          setCapitalFlash(true);
+          setTimeout(() => setCapitalFlash(false), 1500);
+        }
         cargarDatosDashboard();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'creditos' }, () => {
@@ -82,15 +87,20 @@ export default function Home() {
         .eq('rol', 'cobrador');
       if (cobradoresData) setCobradores(cobradoresData);
 
-      // 2. Créditos activos → Capital, Clientes, ROI
+      // 2. Créditos activos → Capital pendiente (saldo real por cobrar), Clientes, ROI
       const { data: creditosData } = await supabase
         .from('creditos')
-        .select('monto_total, monto_diario, interes_total, semanas_autorizadas')
+        .select('monto_total, monto_diario, interes_total, pagos_diarios(pagado)')
         .or('estado.eq.activo,estado.is.null,estado.eq.atrasado');
 
       if (creditosData) {
-        const totalCapital = creditosData.reduce((s, c) => s + Number(c.monto_total || 0), 0);
-        const totalInteres = creditosData.reduce((s, c) => s + Number(c.interes_total || 0), 0);
+        // Capital pendiente = suma de pagos sin cobrar × cuota diaria
+        // Se actualiza en tiempo real con cada pago registrado
+        const totalCapital = (creditosData as any[]).reduce((s, c) => {
+          const pendientes = (c.pagos_diarios || []).filter((p: any) => !p.pagado).length;
+          return s + pendientes * Number(c.monto_diario || 0);
+        }, 0);
+        const totalInteres = (creditosData as any[]).reduce((s, c) => s + Number(c.interes_total || 0), 0);
         const roiPct = totalCapital > 0 ? (totalInteres / totalCapital) * 100 : 0;
 
         // Meta del día: todos los pagos esperados hoy
@@ -229,9 +239,19 @@ export default function Home() {
 
         {/* Métricas principales */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 mt-6">
-          <div className="bg-gray-900 border-l-4 border-red-600 p-4 md:p-6 rounded-r-xl">
-            <p className="text-gray-400 text-[10px] uppercase tracking-wider">Capital Colocado</p>
-            <p className="text-xl md:text-3xl font-bold text-white mt-1">${metricas.capital.toLocaleString('es-MX')}</p>
+          <div className={`bg-gray-900 border-l-4 border-red-600 p-4 md:p-6 rounded-r-xl transition-colors duration-300 ${capitalFlash ? 'bg-emerald-950/40' : ''}`}>
+            <div className="flex items-center gap-1.5">
+              <p className="text-gray-400 text-[10px] uppercase tracking-wider">Capital Pendiente</p>
+              {capitalFlash && (
+                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-900/50 px-1.5 py-0.5 rounded-full animate-pulse">
+                  ↓ actualizado
+                </span>
+              )}
+            </div>
+            <p className={`text-xl md:text-3xl font-bold mt-1 transition-colors duration-500 ${capitalFlash ? 'text-emerald-400' : 'text-white'}`}>
+              ${metricas.capital.toLocaleString('es-MX')}
+            </p>
+            <p className="text-gray-600 text-[10px] mt-1">saldo por cobrar · tiempo real</p>
           </div>
           <div className="bg-gray-900 border-l-4 border-yellow-500 p-4 md:p-6 rounded-r-xl">
             <p className="text-gray-400 text-[10px] uppercase tracking-wider">Clientes Activos</p>
