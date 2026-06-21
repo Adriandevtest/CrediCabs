@@ -20,7 +20,9 @@ export default function Home() {
   });
   const [corteCaja, setCorteCaja] = useState<any[]>([]);
   const [totalCobradoHoy, setTotalCobradoHoy] = useState(0);
+  const [totalMoraHoy, setTotalMoraHoy] = useState(0);
   const [metaHoy, setMetaHoy] = useState(0);
+  const [totalPagosEsperados, setTotalPagosEsperados] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -91,7 +93,7 @@ export default function Home() {
         const totalInteres = creditosData.reduce((s, c) => s + Number(c.interes_total || 0), 0);
         const roiPct = totalCapital > 0 ? (totalInteres / totalCapital) * 100 : 0;
 
-        // Meta del día: créditos con pago esperado hoy
+        // Meta del día: todos los pagos esperados hoy
         const { data: pagosEsperadosHoy } = await supabase
           .from('pagos_diarios')
           .select('creditos(monto_diario)')
@@ -101,6 +103,7 @@ export default function Home() {
           (s: number, p: any) => s + Number(p.creditos?.monto_diario || 0), 0
         );
         setMetaHoy(Math.round(meta));
+        setTotalPagosEsperados((pagosEsperadosHoy || []).length);
 
         setMetricas({
           capital: totalCapital,
@@ -111,15 +114,18 @@ export default function Home() {
         });
       }
 
-      // 3. Corte de caja: todos los pagos marcados como pagados con fecha_esperada = hoy
+      // 3. Corte de caja: pagos cobrados hoy (fecha_esperada = hoy, pagado = true)
+      //    Incluye mora cobrada y cobrador que registró el pago
       const { data: pagadosHoy } = await supabase
         .from('pagos_diarios')
         .select(`
-          id, numero_dia,
+          id, numero_dia, mora,
           creditos (
-            monto_diario, semanas_autorizadas,
+            monto_diario,
+            pagos_diarios ( id ),
             clientes (
               numero_cliente,
+              cobrador_asignado_id,
               profiles ( nombre_completo )
             )
           )
@@ -129,11 +135,33 @@ export default function Home() {
         .order('numero_dia', { ascending: true });
 
       if (pagadosHoy) {
-        setCorteCaja(pagadosHoy);
-        const totalHoy = pagadosHoy.reduce(
-          (s: number, p: any) => s + Number(p.creditos?.monto_diario || 0), 0
-        );
-        setTotalCobradoHoy(Math.round(totalHoy));
+        // Obtener nombres de cobradores para mapear
+        const cobIds = [...new Set(
+          (pagadosHoy as any[])
+            .map((p: any) => p.creditos?.clientes?.cobrador_asignado_id)
+            .filter(Boolean)
+        )];
+        let cobNombreMap: Record<string, string> = {};
+        if (cobIds.length > 0) {
+          const { data: cobPerfiles } = await supabase
+            .from('profiles')
+            .select('id, nombre_completo')
+            .in('id', cobIds);
+          cobNombreMap = Object.fromEntries(
+            (cobPerfiles || []).map((c: any) => [c.id, c.nombre_completo])
+          );
+        }
+
+        const corteFinal = (pagadosHoy as any[]).map((p: any) => ({
+          ...p,
+          _cobrador: cobNombreMap[p.creditos?.clientes?.cobrador_asignado_id] || 'Sin asignar',
+        }));
+
+        setCorteCaja(corteFinal);
+        const totalCuotas = corteFinal.reduce((s, p) => s + Number(p.creditos?.monto_diario || 0), 0);
+        const totalMora = corteFinal.reduce((s, p) => s + Number(p.mora || 0), 0);
+        setTotalCobradoHoy(Math.round(totalCuotas));
+        setTotalMoraHoy(Math.round(totalMora));
       }
     } catch (error) {
       console.error('Error cargando dashboard:', error);
@@ -226,7 +254,8 @@ export default function Home() {
 
         {/* Corte de Caja */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden mb-8">
-          {/* Header corte */}
+
+          {/* Header */}
           <div className="px-4 md:px-6 py-4 border-b border-gray-800 bg-gray-950 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -235,8 +264,9 @@ export default function Home() {
               </div>
               <p className="text-gray-500 text-xs mt-0.5">Pagos registrados hoy en todas las rutas</p>
             </div>
+
             {/* Progreso del día */}
-            <div className="flex flex-col gap-1 md:min-w-[200px]">
+            <div className="flex flex-col gap-1 md:min-w-[220px]">
               <div className="flex justify-between text-xs">
                 <span className="text-gray-400">
                   <span className="text-emerald-400 font-bold">${totalCobradoHoy.toLocaleString('es-MX')}</span>
@@ -250,9 +280,29 @@ export default function Home() {
                   style={{ width: `${porcentajeMeta}%` }}
                 />
               </div>
-              <p className="text-[10px] text-gray-500">{corteCaja.length} pagos cobrados de {/* calcular pendientes */} meta diaria</p>
+              <p className="text-[10px] text-gray-500">
+                {corteCaja.length} cobrados · {Math.max(0, totalPagosEsperados - corteCaja.length)} pendientes de {totalPagosEsperados} esperados hoy
+              </p>
             </div>
           </div>
+
+          {/* Resumen de totales cuando hay mora */}
+          {totalMoraHoy > 0 && (
+            <div className="px-4 md:px-6 py-3 border-b border-gray-800 bg-gray-900/50 flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Cuotas</span>
+                <span className="text-sm font-bold text-white">${totalCobradoHoy.toLocaleString('es-MX')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-red-400 uppercase tracking-wider">+ Mora</span>
+                <span className="text-sm font-bold text-red-400">${totalMoraHoy.toLocaleString('es-MX')}</span>
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-[10px] text-emerald-400 uppercase tracking-wider font-bold">Total</span>
+                <span className="text-base font-black text-emerald-400">${(totalCobradoHoy + totalMoraHoy).toLocaleString('es-MX')}</span>
+              </div>
+            </div>
+          )}
 
           {corteCaja.length === 0 ? (
             <div className="py-12 text-center">
@@ -268,15 +318,19 @@ export default function Home() {
                     <tr className="text-[10px] text-gray-500 uppercase tracking-wider border-b border-gray-800">
                       <th className="px-6 py-3 font-medium">Cliente</th>
                       <th className="px-6 py-3 font-medium">No. Cliente</th>
+                      <th className="px-6 py-3 font-medium">Cobrador</th>
                       <th className="px-6 py-3 font-medium text-center">Pago</th>
-                      <th className="px-6 py-3 font-medium text-right">Monto</th>
+                      <th className="px-6 py-3 font-medium text-right">Cuota</th>
+                      <th className="px-6 py-3 font-medium text-right">Mora</th>
+                      <th className="px-6 py-3 font-medium text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/60">
                     {corteCaja.map((pago, i) => {
                       const cliente = pago.creditos?.clientes;
-                      const monto = pago.creditos?.monto_diario || 0;
-                      const total = pago.creditos?.semanas_autorizadas || 0;
+                      const cuota = Number(pago.creditos?.monto_diario || 0);
+                      const mora = Number(pago.mora || 0);
+                      const total = (pago.creditos?.pagos_diarios || []).length || 0;
                       return (
                         <tr key={pago.id} className={`hover:bg-gray-800/40 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-800/20'}`}>
                           <td className="px-6 py-3 text-white font-medium">
@@ -285,13 +339,25 @@ export default function Home() {
                           <td className="px-6 py-3 text-yellow-500 font-mono text-xs">
                             {cliente?.numero_cliente || '—'}
                           </td>
+                          <td className="px-6 py-3 text-gray-400 text-xs">
+                            {pago._cobrador}
+                          </td>
                           <td className="px-6 py-3 text-center">
                             <span className="text-[11px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">
                               {pago.numero_dia} / {total}
                             </span>
                           </td>
                           <td className="px-6 py-3 text-right text-emerald-400 font-bold">
-                            +${Math.round(monto).toLocaleString('es-MX')}
+                            +${Math.round(cuota).toLocaleString('es-MX')}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            {mora > 0
+                              ? <span className="text-red-400 font-bold text-xs">+${mora.toLocaleString('es-MX')}</span>
+                              : <span className="text-gray-700">—</span>
+                            }
+                          </td>
+                          <td className="px-6 py-3 text-right text-white font-black">
+                            ${Math.round(cuota + mora).toLocaleString('es-MX')}
                           </td>
                         </tr>
                       );
@@ -299,11 +365,17 @@ export default function Home() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-gray-700 bg-gray-950">
-                      <td colSpan={3} className="px-6 py-3 text-gray-400 text-sm font-medium">
+                      <td colSpan={4} className="px-6 py-3 text-gray-400 text-sm font-medium">
                         Total cobrado hoy ({corteCaja.length} pagos)
                       </td>
-                      <td className="px-6 py-3 text-right text-emerald-400 font-black text-lg">
+                      <td className="px-6 py-3 text-right text-emerald-400 font-black">
                         ${totalCobradoHoy.toLocaleString('es-MX')}
+                      </td>
+                      <td className="px-6 py-3 text-right text-red-400 font-black">
+                        {totalMoraHoy > 0 ? `+$${totalMoraHoy.toLocaleString('es-MX')}` : '—'}
+                      </td>
+                      <td className="px-6 py-3 text-right text-white font-black text-lg">
+                        ${(totalCobradoHoy + totalMoraHoy).toLocaleString('es-MX')}
                       </td>
                     </tr>
                   </tfoot>
@@ -314,28 +386,49 @@ export default function Home() {
               <div className="md:hidden divide-y divide-gray-800/60">
                 {corteCaja.map((pago) => {
                   const cliente = pago.creditos?.clientes;
-                  const monto = pago.creditos?.monto_diario || 0;
-                  const total = pago.creditos?.semanas_autorizadas || 0;
+                  const cuota = Number(pago.creditos?.monto_diario || 0);
+                  const mora = Number(pago.mora || 0);
+                  const total = (pago.creditos?.pagos_diarios || []).length || 0;
                   return (
-                    <div key={pago.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">
-                          {cliente?.profiles?.nombre_completo || '—'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-yellow-500 font-mono text-[10px]">{cliente?.numero_cliente}</span>
-                          <span className="text-gray-500 text-[10px]">Pago {pago.numero_dia}/{total}</span>
+                    <div key={pago.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-semibold truncate">
+                            {cliente?.profiles?.nombre_completo || '—'}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-yellow-500 font-mono text-[10px]">{cliente?.numero_cliente}</span>
+                            <span className="text-gray-600 text-[10px]">·</span>
+                            <span className="text-gray-500 text-[10px]">Pago {pago.numero_dia}/{total}</span>
+                            <span className="text-gray-600 text-[10px]">·</span>
+                            <span className="text-gray-400 text-[10px] truncate">{pago._cobrador}</span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-white font-black text-sm">
+                            ${Math.round(cuota + mora).toLocaleString('es-MX')}
+                          </p>
+                          {mora > 0 && (
+                            <p className="text-red-400 text-[10px]">+${mora.toLocaleString('es-MX')} mora</p>
+                          )}
                         </div>
                       </div>
-                      <p className="text-emerald-400 font-bold text-sm shrink-0">
-                        +${Math.round(monto).toLocaleString('es-MX')}
-                      </p>
                     </div>
                   );
                 })}
-                <div className="px-4 py-3 bg-gray-950 flex justify-between items-center border-t-2 border-gray-700">
-                  <span className="text-gray-400 text-sm">{corteCaja.length} pagos cobrados</span>
-                  <span className="text-emerald-400 font-black">${totalCobradoHoy.toLocaleString('es-MX')}</span>
+                <div className="px-4 py-3 bg-gray-950 border-t-2 border-gray-700">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 text-sm">{corteCaja.length} pagos cobrados</span>
+                    <span className="text-white font-black">${(totalCobradoHoy + totalMoraHoy).toLocaleString('es-MX')}</span>
+                  </div>
+                  {totalMoraHoy > 0 && (
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-gray-500 text-[10px]">Cuotas + mora</span>
+                      <span className="text-gray-400 text-[10px]">
+                        ${totalCobradoHoy.toLocaleString('es-MX')} + ${totalMoraHoy.toLocaleString('es-MX')}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
