@@ -63,8 +63,10 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
 
       for (const cliente of data || []) {
         const creditos: any[] = (cliente as any).creditos || [];
-        // Créditos activos o marcados como atrasados (ambos pueden tener mora)
-        const creditoActivo = creditos.find((c: any) => c.estado === 'activo' || c.estado === 'atrasado');
+        // Excluir solo estados terminales; null/activo/atrasado son válidos
+        const creditoActivo = creditos.find((c: any) =>
+          c.estado !== 'liquidado' && c.estado !== 'completado'
+        );
         if (!creditoActivo) continue;
 
         const pagos: { fecha_esperada: string; pagado: boolean }[] =

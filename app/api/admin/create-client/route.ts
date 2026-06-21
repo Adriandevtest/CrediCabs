@@ -85,7 +85,8 @@ export async function POST(request: Request) {
         monto_diario: cuotaDiaria,
         tasa_interes_porcentaje: tasaPorcentaje,
         interes_total: interesTotal,
-        fecha_inicio: new Date().toISOString().split('T')[0]
+        estado: 'activo',
+        fecha_inicio: new Date().toLocaleDateString('en-CA')
       })
       .select()
       .single();
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
       pagos.push({
         credito_id: creditoData.id,
         numero_dia: i + 1,
-        fecha_esperada: new Date(fechaActual).toISOString().split('T')[0],
+        fecha_esperada: new Date(fechaActual).toLocaleDateString('en-CA'),
         pagado: false
       });
       // Avanzar al siguiente día hábil
