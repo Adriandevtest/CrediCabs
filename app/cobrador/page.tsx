@@ -220,26 +220,40 @@ export default function CobradorPage() {
     }
   };
 
-  const registrarPago = async (entryKey: string, creditoId: string, mora: number = 0) => {
+  const registrarPago = async (entryKey: string, creditoId: string, totalACobrar: number = 0) => {
     setProcesandoPago(creditoId);
     try {
-      const { data: nextPayment, error: findError } = await supabase
+      // Obtener TODOS los pagos vencidos + el de hoy (si existe) sin pagar
+      const { data: pagosDebidos, error: findError } = await supabase
         .from('pagos_diarios')
-        .select('id')
+        .select('id, fecha_esperada')
         .eq('credito_id', creditoId)
         .eq('pagado', false)
-        .order('numero_dia', { ascending: true })
-        .limit(1)
-        .single();
+        .lte('fecha_esperada', today)
+        .order('numero_dia', { ascending: true });
 
-      if (findError || !nextPayment) throw new Error('No hay pagos pendientes.');
+      if (findError || !pagosDebidos || pagosDebidos.length === 0) {
+        throw new Error('No hay pagos pendientes.');
+      }
 
-      const { error: updateError } = await supabase
-        .from('pagos_diarios')
-        .update({ pagado: true, mora })
-        .eq('id', nextPayment.id);
+      // Pagos atrasados (< hoy) llevan $50 mora c/u; el de hoy lleva $0
+      const atrasadosIds = pagosDebidos.filter(p => p.fecha_esperada < today).map(p => p.id);
+      const hoyIds = pagosDebidos.filter(p => p.fecha_esperada === today).map(p => p.id);
 
-      if (updateError) throw updateError;
+      if (atrasadosIds.length > 0) {
+        const { error: e1 } = await supabase
+          .from('pagos_diarios')
+          .update({ pagado: true, mora: MORA_POR_DIA })
+          .in('id', atrasadosIds);
+        if (e1) throw e1;
+      }
+      if (hoyIds.length > 0) {
+        const { error: e2 } = await supabase
+          .from('pagos_diarios')
+          .update({ pagado: true, mora: 0 })
+          .in('id', hoyIds);
+        if (e2) throw e2;
+      }
 
       // Si no quedan más pagos pendientes, marcar el crédito como liquidado
       const { count: pendientes } = await supabase
@@ -256,13 +270,11 @@ export default function CobradorPage() {
         setCompletados((prev) => [...prev, entry]);
         setRuta((prev) => prev.filter((c) => c._entryKey !== entryKey));
 
-        // Notificar admins que este cliente pagó
         const clienteNombre = (entry.profiles as any)?.nombre_completo || `Cliente ${entry.numero_cliente}`;
-        const monto = entry._credito?.monto_diario;
         fetch('/api/notifications/pago-registrado', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clienteNombre, monto }),
+          body: JSON.stringify({ clienteNombre, monto: totalACobrar }),
         }).catch(() => {});
       }
     } catch (e: any) {
@@ -392,7 +404,11 @@ export default function CobradorPage() {
                         const isProcessing = procesandoPago === cliente._creditoId;
                         const atrasado = credito?.estado === 'atrasado';
                         const mora = calcularMora(credito.pagos_diarios || []);
-                        const totalACobrar = Math.round(credito.monto_diario) + mora;
+                        // Todos los pagos vencidos + el de hoy que se cobrarán juntos
+                        const diasPagar = (credito.pagos_diarios || []).filter(
+                          (p: any) => !p.pagado && p.fecha_esperada <= today
+                        ).length;
+                        const totalACobrar = Math.round(credito.monto_diario * (diasPagar || 1)) + mora;
 
                         const pagosOrdenados =[...(credito.pagos_diarios || [])].sort(
                           (a: any, b: any) => a.numero_dia - b.numero_dia
@@ -453,32 +469,42 @@ export default function CobradorPage() {
                             )}
 
                             <div className={`rounded-xl p-3 mb-3 ${mora > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota diaria</p>
-                                  <p className="text-xl font-semibold text-red-600 mt-0.5">
-                                    ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
-                                  </p>
-                                </div>
-                                {mora > 0 ? (
-                                  <div className="text-right">
-                                    <p className="text-xs text-red-500 uppercase tracking-wider font-bold">Mora</p>
-                                    <p className="text-base font-bold text-red-600 mt-0.5">+${mora.toLocaleString('es-MX')}</p>
-                                    <p className="text-[10px] text-red-400">{mora / MORA_POR_DIA} día{mora / MORA_POR_DIA !== 1 ? 's' : ''} de atraso</p>
+                              {mora > 0 ? (
+                                <>
+                                  {/* Desglose para clientes con mora */}
+                                  <div className="flex justify-between items-center mb-1.5">
+                                    <p className="text-xs text-gray-500 uppercase tracking-wider">
+                                      Cuotas ({diasPagar} × ${Math.round(credito.monto_diario).toLocaleString('es-MX')})
+                                    </p>
+                                    <p className="text-sm font-semibold text-gray-800">
+                                      ${Math.round(credito.monto_diario * diasPagar).toLocaleString('es-MX')}
+                                    </p>
                                   </div>
-                                ) : (
+                                  <div className="flex justify-between items-center mb-1.5">
+                                    <p className="text-xs text-red-500 uppercase tracking-wider font-bold">
+                                      Mora ({mora / MORA_POR_DIA} × $50)
+                                    </p>
+                                    <p className="text-sm font-bold text-red-600">+${mora.toLocaleString('es-MX')}</p>
+                                  </div>
+                                  <div className="pt-2 border-t border-red-200 flex justify-between items-center">
+                                    <p className="text-xs text-red-700 font-bold uppercase tracking-wider">Total a cobrar</p>
+                                    <p className="text-lg font-black text-red-700">${totalACobrar.toLocaleString('es-MX')}</p>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota del día</p>
+                                    <p className="text-xl font-semibold text-red-600 mt-0.5">
+                                      ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
+                                    </p>
+                                  </div>
                                   <div className="text-right">
                                     <p className="text-xs text-gray-400 uppercase tracking-wider">Total crédito</p>
                                     <p className="text-base font-medium text-gray-700 mt-0.5">
                                       ${Math.round(credito.monto_total).toLocaleString('es-MX')}
                                     </p>
                                   </div>
-                                )}
-                              </div>
-                              {mora > 0 && (
-                                <div className="mt-2 pt-2 border-t border-red-200 flex justify-between items-center">
-                                  <p className="text-xs text-red-700 font-bold uppercase tracking-wider">Total a cobrar</p>
-                                  <p className="text-lg font-black text-red-700">${totalACobrar.toLocaleString('es-MX')}</p>
                                 </div>
                               )}
                             </div>
@@ -502,7 +528,7 @@ export default function CobradorPage() {
                             )}
 
                             <button
-                              onClick={() => registrarPago(cliente._entryKey, cliente._creditoId, mora)}
+                              onClick={() => registrarPago(cliente._entryKey, cliente._creditoId, totalACobrar)}
                               disabled={isProcessing}
                               className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
                             >
