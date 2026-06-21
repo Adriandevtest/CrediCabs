@@ -107,7 +107,11 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
     return matchSearch && matchCobrador;
   });
 
-  const totalMora = filtrados.reduce((a, c) => a + c.mora, 0);
+  // Total real a cobrar = (días × cuota) + (días × $50 mora)
+  const totalACobrar = filtrados.reduce(
+    (a, c) => a + Math.round(c.dias * c.monto_diario) + c.mora, 0
+  );
+  const totalMoraPenalidad = filtrados.reduce((a, c) => a + c.mora, 0);
   const maxDias = filtrados.length > 0 ? filtrados[0].dias : 0;
 
   if (loading) {
@@ -141,8 +145,9 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
           <p className="text-gray-500 text-xs mt-1">Clientes en mora</p>
         </div>
         <div className="bg-red-950/40 border border-red-800/40 rounded-2xl p-4 text-center">
-          <p className="text-red-400 font-black text-2xl">${totalMora.toLocaleString('es-MX')}</p>
-          <p className="text-gray-500 text-xs mt-1">Mora total</p>
+          <p className="text-red-400 font-black text-xl">${totalACobrar.toLocaleString('es-MX')}</p>
+          <p className="text-gray-500 text-xs mt-1">Total a cobrar</p>
+          <p className="text-red-700 text-[10px] mt-0.5">incl. ${totalMoraPenalidad.toLocaleString('es-MX')} mora</p>
         </div>
         <div className="bg-red-950/40 border border-red-800/40 rounded-2xl p-4 text-center">
           <p className="text-red-400 font-black text-2xl">{maxDias}</p>
@@ -214,22 +219,31 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
                   </span>
                 </div>
 
-                {/* Mora */}
+                {/* Desglose de deuda */}
                 <div className={`${colores.bg} border ${colores.borde} rounded-xl px-4 py-3`}>
+                  {/* Cuotas atrasadas */}
                   <div className="flex justify-between items-center mb-1.5">
-                    <p className="text-gray-400 text-[10px] uppercase font-bold">Cuota diaria</p>
-                    <p className="text-gray-300 text-sm font-bold">${Math.round(c.monto_diario).toLocaleString('es-MX')}</p>
+                    <p className="text-gray-400 text-[10px] uppercase font-bold">
+                      Cuotas atrasadas ({c.dias} × ${Math.round(c.monto_diario).toLocaleString('es-MX')})
+                    </p>
+                    <p className="text-gray-300 text-sm font-bold">
+                      ${Math.round(c.dias * c.monto_diario).toLocaleString('es-MX')}
+                    </p>
                   </div>
+                  {/* Penalidad mora */}
                   <div className="flex justify-between items-center mb-1.5">
                     <p className={`text-[10px] uppercase font-bold ${colores.icon}`}>
                       Mora ({c.dias} × ${MORA_POR_DIA})
                     </p>
-                    <p className={`text-sm font-bold ${colores.icon}`}>+${c.mora.toLocaleString('es-MX')}</p>
+                    <p className={`text-sm font-bold ${colores.icon}`}>
+                      +${c.mora.toLocaleString('es-MX')}
+                    </p>
                   </div>
+                  {/* Total */}
                   <div className="pt-1.5 border-t border-white/5 flex justify-between items-center">
                     <p className="text-gray-400 text-[10px] uppercase font-bold">Total a cobrar</p>
                     <p className="text-white font-black text-lg">
-                      ${(Math.round(c.monto_diario) + c.mora).toLocaleString('es-MX')}
+                      ${(Math.round(c.dias * c.monto_diario) + c.mora).toLocaleString('es-MX')}
                     </p>
                   </div>
                 </div>
