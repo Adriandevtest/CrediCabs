@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ClientTable from '../components/ClientTable';
 import ActionModal from '../components/ActionModal';
 import ExcelImportExport from '../components/ExcelImportExport';
+import AdminPinModal from '../components/AdminPinModal';
 import { supabase } from '../lib/supabase';
 import UserNav from '../components/UserNav';
 import { LumaSpin } from '../components/luma-spin';
@@ -26,6 +27,7 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [capitalFlash, setCapitalFlash] = useState(false);
+  const [pinPreviewOpen, setPinPreviewOpen] = useState(false);
   const router = useRouter();
 
   const hoy = new Date();
@@ -206,6 +208,14 @@ export default function Home() {
           <p className="text-gray-500 text-[9px] uppercase tracking-widest">Admin Central</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Botón preview PIN — solo móvil */}
+          <button
+            onClick={() => setPinPreviewOpen(true)}
+            className="text-gray-500 hover:text-yellow-400 transition-colors p-1"
+            title="Probar modal PIN"
+          >
+            <i className="fa-solid fa-key text-sm" />
+          </button>
           <button
             onClick={() => setIsModalOpen(true)}
             className="bg-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full"
@@ -242,6 +252,15 @@ export default function Home() {
             <h1 className="text-4xl font-black text-white">Credi <span className="text-red-600">Cab's</span></h1>
             <p className="text-gray-400 text-base tracking-widest uppercase">Admin Central</p>
           </div>
+          {/* Botón preview PIN — escritorio */}
+          <button
+            onClick={() => setPinPreviewOpen(true)}
+            className="flex items-center gap-2 text-gray-600 hover:text-yellow-400 text-xs transition-colors py-1 px-2 rounded-lg hover:bg-gray-900"
+            title="Probar modal PIN"
+          >
+            <i className="fa-solid fa-key" />
+            Probar PIN
+          </button>
         </header>
 
         {/* Métricas principales */}
@@ -483,6 +502,15 @@ export default function Home() {
           cobradores={cobradores}
         />
       </div>
+
+      {/* Modal preview PIN — solo para probar la apariencia y el teclado */}
+      <AdminPinModal
+        open={pinPreviewOpen}
+        titulo="Probar modal PIN"
+        descripcion="Este es el modal de seguridad. En móvil el teclado debe abrirse automáticamente."
+        onConfirm={() => setPinPreviewOpen(false)}
+        onCancel={() => setPinPreviewOpen(false)}
+      />
     </main>
   );
 }

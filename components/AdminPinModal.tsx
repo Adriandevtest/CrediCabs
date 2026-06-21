@@ -23,27 +23,31 @@ export default function AdminPinModal({
   const [estado, setEstado] = useState<'idle' | 'verificando' | 'error' | 'ok'>('idle');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (open) {
-      setValue('');
-      setEstado('idle');
-      // Delay necesario para que el DOM monte el input antes de enfocar
-      // En móvil, requestAnimationFrame da tiempo al navegador para renderizar
-      requestAnimationFrame(() => {
-        setTimeout(() => inputRef.current?.focus(), 100);
-      });
-    }
-  }, [open]);
-
-  // Bloquear scroll del body mientras el modal está abierto
+  // Bloquear scroll del body + reset estado al abrir
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
+      setValue('');
+      setEstado('idle');
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
   }, [open]);
+
+  // Intentos de foco escalonados: desktop enfoca inmediatamente,
+  // en iOS/Android los timeouts más largos cubren el retraso del render
+  useEffect(() => {
+    if (!open) return;
+    const tryFocus = () => inputRef.current?.focus();
+    tryFocus();
+    const t1 = setTimeout(tryFocus, 80);
+    const t2 = setTimeout(tryFocus, 200);
+    const t3 = setTimeout(tryFocus, 450);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [open]);
+
+  const focusInput = () => inputRef.current?.focus();
 
   const verificar = async (pin: string) => {
     setEstado('verificando');
@@ -62,7 +66,7 @@ export default function AdminPinModal({
         setValue('');
         setTimeout(() => {
           setEstado('idle');
-          inputRef.current?.focus();
+          focusInput();
         }, 1200);
       }
     } catch {
@@ -71,7 +75,7 @@ export default function AdminPinModal({
     }
   };
 
-  const handleCancel = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleCancel = (e: React.SyntheticEvent) => {
     e.stopPropagation();
     e.preventDefault();
     onCancel();
@@ -80,23 +84,22 @@ export default function AdminPinModal({
   if (!open) return null;
 
   return (
-    // Contenedor: cubre toda la pantalla y bloquea TODOS los eventos hacia atrás
+    // Capa exterior: bloquea TODOS los eventos hacia el contenido detrás
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center"
-      // Bloquar todos los eventos de puntero para que no pasen al contenido detrás
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       onTouchEnd={(e) => e.stopPropagation()}
     >
-      {/* Backdrop — clic fuera cierra */}
+      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onPointerDown={handleCancel}
       />
 
-      {/* Card — stopPropagation para que clics internos no lleguen al backdrop */}
+      {/* Tarjeta */}
       <div
         className="relative z-10 bg-gray-950 border border-gray-800 rounded-2xl p-8 w-full max-w-sm mx-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -107,11 +110,11 @@ export default function AdminPinModal({
         <div className={cn(
           'w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 transition-colors',
           estado === 'ok'    ? 'bg-emerald-900/50' :
-          estado === 'error' ? 'bg-red-900/50' : 'bg-red-950/60'
+          estado === 'error' ? 'bg-red-900/50'     : 'bg-red-950/60'
         )}>
           <i className={cn('fa-solid text-2xl',
             estado === 'ok'    ? 'fa-circle-check text-emerald-400' :
-            estado === 'error' ? 'fa-circle-xmark text-red-400' :
+            estado === 'error' ? 'fa-circle-xmark text-red-400'     :
             'fa-shield-halved text-red-500'
           )} />
         </div>
@@ -120,48 +123,66 @@ export default function AdminPinModal({
           {estado === 'ok' ? '¡Acceso concedido!' : titulo}
         </h2>
         <p className="text-gray-500 text-sm text-center mb-7">
-          {estado === 'ok'    ? 'Ejecutando acción...' :
+          {estado === 'ok'    ? 'Ejecutando acción...'                :
            estado === 'error' ? 'PIN incorrecto. Inténtalo de nuevo.' :
            descripcion}
         </p>
 
-        {/* OTP Input */}
         {estado !== 'ok' && (
-          <div className="flex justify-center mb-6">
-            <OTPInput
-              ref={inputRef}
-              value={value}
-              onChange={setValue}
-              maxLength={4}
-              disabled={estado === 'verificando'}
-              containerClassName="flex items-center gap-3"
-              onComplete={(v) => verificar(v)}
-              // autoFocus abre el teclado en móvil al montar el input
-              autoFocus
-              render={({ slots }) => (
-                <div className="flex gap-3">
-                  {slots.map((slot, i) => (
-                    <PinSlot key={i} slot={slot} error={estado === 'error'} />
-                  ))}
-                </div>
-              )}
-            />
-          </div>
+          <>
+            {/*
+              El wrapper con onClick/onTouchEnd→focusInput garantiza que al tocar
+              cualquier parte del área de slots en móvil, se llame focus() dentro
+              de un gesto de usuario real → el teclado se abre siempre.
+              pointer-events-none en los slots visuales deja pasar el toque al wrapper.
+            */}
+            <div
+              className="flex justify-center mb-2 cursor-text"
+              onClick={focusInput}
+              onTouchEnd={(e) => { e.stopPropagation(); focusInput(); }}
+            >
+              <OTPInput
+                ref={inputRef}
+                value={value}
+                onChange={setValue}
+                maxLength={4}
+                disabled={estado === 'verificando'}
+                containerClassName="flex items-center gap-3"
+                onComplete={(v) => verificar(v)}
+                autoFocus
+                render={({ slots }) => (
+                  <div className="flex gap-3 pointer-events-none select-none">
+                    {slots.map((slot, i) => (
+                      <PinSlot key={i} slot={slot} error={estado === 'error'} />
+                    ))}
+                  </div>
+                )}
+              />
+            </div>
+
+            {/* Hint móvil — desaparece en cuanto el usuario empieza a escribir */}
+            {value.length === 0 && estado === 'idle' && (
+              <p className="text-center text-gray-600 text-[10px] mb-4 md:hidden animate-pulse">
+                Toca los campos para abrir el teclado
+              </p>
+            )}
+            {(value.length > 0 || estado !== 'idle') && <div className="mb-4" />}
+
+            {estado === 'verificando' && (
+              <p className="text-center text-gray-500 text-xs -mt-2 mb-2">
+                <i className="fa-solid fa-spinner fa-spin mr-1" />
+                Verificando...
+              </p>
+            )}
+          </>
         )}
 
-        {estado === 'verificando' && (
-          <p className="text-center text-gray-500 text-xs mb-4">
-            <i className="fa-solid fa-spinner fa-spin mr-1" />
-            Verificando...
-          </p>
-        )}
-
-        {/* Botón cancelar — área táctil grande para móvil */}
+        {/* Cancelar */}
         <button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={handleCancel}
-          className="w-full text-gray-400 hover:text-white active:text-white text-sm font-medium py-3 mt-1 rounded-xl transition-colors active:bg-gray-800"
+          className="w-full text-gray-400 hover:text-white active:text-white text-sm font-medium py-3 rounded-xl transition-colors active:bg-gray-800"
         >
           Cancelar
         </button>
@@ -174,7 +195,7 @@ function PinSlot({ slot, error }: { slot: SlotProps; error: boolean }) {
   return (
     <div
       className={cn(
-        'w-12 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-black transition-all duration-150 select-none',
+        'w-12 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-black transition-all duration-150',
         slot.isActive
           ? 'border-red-500 bg-red-950/30 shadow-[0_0_0_3px_rgba(213,0,0,0.15)]'
           : error
