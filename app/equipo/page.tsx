@@ -120,6 +120,7 @@ export default function EquipoPage() {
             <Link href="/clientes" className="px-5 py-2 text-gray-400 hover:text-yellow-500 transition-colors font-medium">Clientes</Link>
             <Link href="/equipo" className="px-5 py-2 border-b-2 border-red-600 text-white font-bold">Equipo</Link>
             <Link href="/bandeja" className="px-5 py-2 text-gray-400 hover:text-yellow-500 transition-colors font-medium">Bandeja</Link>
+            <Link href="/mapa" className="px-5 py-2 text-gray-400 hover:text-yellow-500 transition-colors font-medium">Mapa</Link>
           </div>
           <div className="flex items-center gap-6">
             <UserNav />
