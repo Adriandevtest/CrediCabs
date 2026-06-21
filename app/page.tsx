@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ClientTable from '../components/ClientTable';
 import ActionModal from '../components/ActionModal';
+import ExcelImportExport from '../components/ExcelImportExport';
 import { supabase } from '../lib/supabase';
 import UserNav from '../components/UserNav';
 import { LumaSpin } from '../components/luma-spin';
@@ -464,6 +465,14 @@ export default function Home() {
               </div>
             </>
           )}
+        </div>
+
+        {/* Exportar / Importar Excel — solo PC */}
+        <div className="mb-4">
+          <ExcelImportExport
+            cobradores={cobradores}
+            onImportDone={cargarDatosDashboard}
+          />
         </div>
 
         <ClientTable />
