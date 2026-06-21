@@ -15,8 +15,7 @@ export default function Home() {
     capital: 0,
     clientes: 0,
     cobroHoy: 0,
-    interesProyectado: 0,
-    roiPorcentaje: 0,
+    capitalActual: 0,
   });
   const [corteCaja, setCorteCaja] = useState<any[]>([]);
   const [totalCobradoHoy, setTotalCobradoHoy] = useState(0);
@@ -95,13 +94,10 @@ export default function Home() {
 
       if (creditosData) {
         // Capital pendiente = suma de pagos sin cobrar × cuota diaria
-        // Se actualiza en tiempo real con cada pago registrado
         const totalCapital = (creditosData as any[]).reduce((s, c) => {
           const pendientes = (c.pagos_diarios || []).filter((p: any) => !p.pagado).length;
           return s + pendientes * Number(c.monto_diario || 0);
         }, 0);
-        const totalInteres = (creditosData as any[]).reduce((s, c) => s + Number(c.interes_total || 0), 0);
-        const roiPct = totalCapital > 0 ? (totalInteres / totalCapital) * 100 : 0;
 
         // Meta del día: todos los pagos esperados hoy
         const { data: pagosEsperadosHoy } = await supabase
@@ -115,12 +111,22 @@ export default function Home() {
         setMetaHoy(Math.round(meta));
         setTotalPagosEsperados((pagosEsperadosHoy || []).length);
 
+        // Capital actual = suma de todos los pagos cobrados (cuota + mora)
+        // Sube en tiempo real con cada cobro registrado
+        const { data: pagosRealizados } = await supabase
+          .from('pagos_diarios')
+          .select('mora, creditos!inner(monto_diario)')
+          .eq('pagado', true);
+
+        const capitalActual = (pagosRealizados as any[] || []).reduce(
+          (s, p) => s + Number(p.creditos?.monto_diario || 0) + Number(p.mora || 0), 0
+        );
+
         setMetricas({
           capital: totalCapital,
           clientes: creditosData.length,
           cobroHoy: Math.round(meta),
-          interesProyectado: totalInteres,
-          roiPorcentaje: roiPct,
+          capitalActual: Math.round(capitalActual),
         });
       }
 
@@ -261,14 +267,19 @@ export default function Home() {
             <p className="text-gray-400 text-[10px] uppercase tracking-wider">Meta de Hoy</p>
             <p className="text-xl md:text-3xl font-bold text-yellow-500 mt-1">${metricas.cobroHoy.toLocaleString('es-MX')}</p>
           </div>
-          <div className="bg-gray-900 border-l-4 border-emerald-500 p-4 md:p-6 rounded-r-xl">
-            <p className="text-gray-400 text-[10px] uppercase tracking-wider">Retorno de Inversión</p>
-            <p className="text-xl md:text-3xl font-bold text-emerald-400 mt-1">
-              {metricas.roiPorcentaje.toFixed(1)}%
+          <div className={`bg-gray-900 border-l-4 border-emerald-500 p-4 md:p-6 rounded-r-xl transition-colors duration-300 ${capitalFlash ? 'bg-emerald-950/40' : ''}`}>
+            <div className="flex items-center gap-1.5">
+              <p className="text-gray-400 text-[10px] uppercase tracking-wider">Capital Actual</p>
+              {capitalFlash && (
+                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-900/50 px-1.5 py-0.5 rounded-full animate-pulse">
+                  ↑ cobro
+                </span>
+              )}
+            </div>
+            <p className={`text-xl md:text-3xl font-bold mt-1 transition-colors duration-500 ${capitalFlash ? 'text-emerald-400' : 'text-emerald-400'}`}>
+              ${metricas.capitalActual.toLocaleString('es-MX')}
             </p>
-            <p className="text-gray-500 text-[10px] mt-1">
-              +${metricas.interesProyectado.toLocaleString('es-MX', { maximumFractionDigits: 0 })} interés
-            </p>
+            <p className="text-gray-600 text-[10px] mt-1">total cobrado · cuotas + mora</p>
           </div>
         </div>
 
