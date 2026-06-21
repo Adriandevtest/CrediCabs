@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { supabase } from '../../lib/supabase';
 
 export default function LoginPage() {
@@ -148,9 +149,12 @@ export default function LoginPage() {
                 backdropFilter: 'blur(12px)',
               }}
             >
-              <img
+              <Image
                 src="/logo.png"
                 alt="Credi Cab's"
+                width={96}
+                height={96}
+                priority
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
