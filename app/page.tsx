@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ClientTable from '../components/ClientTable';
 import ActionModal from '../components/ActionModal';
 import ExcelImportExport from '../components/ExcelImportExport';
+import CambiarPinModal from '../components/CambiarPinModal';
 import { supabase } from '../lib/supabase';
 import UserNav from '../components/UserNav';
 import { LumaSpin } from '../components/luma-spin';
@@ -26,6 +27,7 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [capitalFlash, setCapitalFlash] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
   const router = useRouter();
 
   const hoy = new Date();
@@ -242,7 +244,16 @@ export default function Home() {
             <h1 className="text-4xl font-black text-white">Credi <span className="text-red-600">Cab's</span></h1>
             <p className="text-gray-400 text-base tracking-widest uppercase">Admin Central</p>
           </div>
+          <button
+            onClick={() => setPinModalOpen(true)}
+            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors"
+          >
+            <i className="fa-solid fa-key text-yellow-500" />
+            Cambiar PIN
+          </button>
         </header>
+
+        <CambiarPinModal open={pinModalOpen} onClose={() => setPinModalOpen(false)} />
 
         {/* Métricas principales */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 mt-6">

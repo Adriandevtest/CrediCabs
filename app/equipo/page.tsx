@@ -9,6 +9,7 @@ import UserNav from '../../components/UserNav';
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 import { AnimatedStaffForm } from '../../components/AnimatedStaffForm';
 import { LumaSpin } from '../../components/luma-spin';
+import AdminPinModal from '../../components/AdminPinModal';
 
 const getIniciales = (nombre: string) => {
   if (!nombre) return '?';
@@ -27,6 +28,7 @@ export default function EquipoPage() {
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
   const [despidiendo, setDespidiendo] = useState(false);
+  const [pinDespedirOpen, setPinDespedirOpen] = useState(false);
   const [clientesAsignados, setClientesAsignados] = useState<any[]>([]);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
 
@@ -48,10 +50,13 @@ export default function EquipoPage() {
     }
   };
 
-  const handleDespedir = async () => {
+  const handleDespedir = () => {
     if (!selectedMember) return;
-    if (!confirm(`⚠️ ¿Estás seguro de que deseas despedir a ${selectedMember.nombre_completo}? Esta acción no se puede deshacer.`)) return;
+    setPinDespedirOpen(true);
+  };
 
+  const confirmarDespedir = async () => {
+    if (!selectedMember) return;
     setDespidiendo(true);
     try {
       // Eliminar del perfil
@@ -350,6 +355,14 @@ export default function EquipoPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AdminPinModal
+        open={pinDespedirOpen}
+        titulo="Despedir Personal"
+        descripcion={`¿Seguro que deseas eliminar a ${selectedMember?.nombre_completo} del equipo? Esta acción no se puede deshacer.`}
+        onConfirm={() => { setPinDespedirOpen(false); confirmarDespedir(); }}
+        onCancel={() => setPinDespedirOpen(false)}
+      />
     </main>
   );
 }

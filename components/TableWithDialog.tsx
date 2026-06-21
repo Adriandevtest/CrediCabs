@@ -8,12 +8,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "./ui/badge";
 import { supabase } from "../lib/supabase";
 import { ImageLightbox } from "./ImageLightbox";
+import AdminPinModal from "./AdminPinModal";
 
 export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }: { searchQuery: string, statusFilter?: string }) {
   const [clientes, setClientes] = useState<any[]>([]);
   const [cobradores, setCobradores] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [eliminando, setEliminando] = useState(false);
+  const [pinEliminarOpen, setPinEliminarOpen] = useState(false);
   const [verMas, setVerMas] = useState(false);
   const [detalleExtra, setDetalleExtra] = useState<any>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
@@ -280,10 +282,11 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
   const eliminarCliente = async () => {
     if (!selectedUser) return;
-    const confirmar = window.confirm(
-      `¿Estás seguro de eliminar a "${selectedUser.profiles?.nombre_completo}"? Esta acción no se puede deshacer.`
-    );
-    if (!confirmar) return;
+    setPinEliminarOpen(true);
+  };
+
+  const confirmarEliminarCliente = async () => {
+    if (!selectedUser) return;
 
     setEliminando(true);
     try {
@@ -916,6 +919,15 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       >
         {dialogContent}
       </Dialog>
+
+      {/* PIN para eliminar cliente */}
+      <AdminPinModal
+        open={pinEliminarOpen}
+        titulo="Eliminar Cliente"
+        descripcion={`¿Seguro que deseas eliminar a "${selectedUser?.profiles?.nombre_completo}"? Esta acción no se puede deshacer.`}
+        onConfirm={() => { setPinEliminarOpen(false); confirmarEliminarCliente(); }}
+        onCancel={() => setPinEliminarOpen(false)}
+      />
 
       {/* ── MÓVIL: lista de tarjetas ── */}
       <div className="md:hidden divide-y divide-gray-800 max-h-[70vh] overflow-y-auto">

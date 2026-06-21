@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import AdminPinModal from './AdminPinModal';
 
 interface Cobrador {
   id: string;
@@ -10,6 +11,7 @@ interface Cobrador {
 
 export default function RegisterClientForm({ cobradores, onSuccess }: { cobradores: Cobrador[], onSuccess?: () => void }) {
   const [loading, setLoading] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
@@ -25,6 +27,10 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPinOpen(true);
+  };
+
+  const ejecutarCreacion = async () => {
     setLoading(true);
     try {
       if (!formData.cobrador_id) {
@@ -162,8 +168,21 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
       </div>
 
       <button disabled={loading} className="w-full bg-red-600 hover:bg-red-700 transition-colors p-4 rounded-lg text-white font-bold mt-4 shadow-lg shadow-red-900/50">
-        {loading ? 'Procesando...' : 'Autorizar Crédito'}
+        {loading ? 'Procesando...' : (
+          <span className="flex items-center justify-center gap-2">
+            <i className="fa-solid fa-shield-halved" />
+            Autorizar Crédito
+          </span>
+        )}
       </button>
+
+      <AdminPinModal
+        open={pinOpen}
+        titulo="Autorizar Crédito"
+        descripcion="Ingresa el PIN de administrador para autorizar este crédito."
+        onConfirm={() => { setPinOpen(false); ejecutarCreacion(); }}
+        onCancel={() => setPinOpen(false)}
+      />
     </form>
   );
 }
