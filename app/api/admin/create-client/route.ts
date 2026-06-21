@@ -22,10 +22,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El esquema debe ser 28 o 37 pagos.' }, { status: 400 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://pnesuibfgtescgudkerf.supabase.co';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceKey) {
+      return NextResponse.json(
+        { error: 'Configuración incompleta: falta SUPABASE_SERVICE_ROLE_KEY en las variables de entorno de Vercel.' },
+        { status: 500 }
+      );
+    }
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
     // 1. Crear usuario en Auth sin iniciar sesión
     const emailAutomatico = email || `cliente_${Date.now()}@credicabs.com`;
