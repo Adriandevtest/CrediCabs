@@ -398,7 +398,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
           <td>${fmtFecha(p.fecha_esperada)}</td>
           <td class="t-right">$${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}</td>
           <td><span class="badge ${badge}">${etiqueta}</span></td>
-          <td style="color:#15803d;">${p.pagado && p.fecha_pago ? fmtFecha(p.fecha_pago) : ''}</td>
+          <td style="color:#d97706;font-size:10px;">${!p.pagado && (p.mora || 0) > 0 ? '$' + Number(p.mora).toLocaleString('es-MX') : ''}</td>
         </tr>`;
       }).join('');
 
@@ -463,7 +463,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
               <th>Fecha Programada</th>
               <th class="t-right">Monto</th>
               <th>Estado</th>
-              <th>Fecha de Pago</th>
+              <th>Mora</th>
             </tr>
           </thead>
           <tbody>${filas}</tbody>

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
     const { data: pagos, error } = await sb
       .from('pagos_diarios')
-      .select('credito_id, fecha_esperada, pagado, fecha_pago')
+      .select('credito_id, fecha_esperada, pagado, mora')
       .in('credito_id', creditoIds)
       .order('fecha_esperada', { ascending: true });
 
