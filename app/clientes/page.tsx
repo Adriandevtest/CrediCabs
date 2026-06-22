@@ -17,6 +17,7 @@ export default function ClientesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [cobradores, setCobradores] = useState<any[]>([]);
   const [vista, setVista] = useState<Vista>('todos');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     cargarCobradores();
@@ -131,7 +132,7 @@ export default function ClientesPage() {
                 <DialogDescription className="sr-only">Formulario para agregar un nuevo cliente y otorgar crédito.</DialogDescription>
                 <RegisterClientForm
                   cobradores={cobradores}
-                  onSuccess={() => { setIsModalOpen(false); window.location.reload(); }}
+                  onSuccess={() => { setIsModalOpen(false); setRefreshKey(k => k + 1); }}
                 />
               </DialogContent>
             </Dialog>
@@ -158,7 +159,7 @@ export default function ClientesPage() {
 
         {/* Contenido según tab */}
         {vista === 'todos'
-          ? <TableWithDialog searchQuery={searchQuery} />
+          ? <TableWithDialog key={refreshKey} searchQuery={searchQuery} />
           : <ClientesEnMora searchQuery={searchQuery} />
         }
 

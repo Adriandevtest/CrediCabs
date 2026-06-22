@@ -31,6 +31,8 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   const [nuevoCredito, setNuevoCredito] = useState({ monto_total: 0, num_pagos: 28, tasa: 0 });
   const [agregandoCredito, setAgregandoCredito] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [loadingClientes, setLoadingClientes] = useState(true);
+  const [errorClientes, setErrorClientes] = useState<string | null>(null);
 
   useEffect(() => {
     fetchClientes();
@@ -60,28 +62,43 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   }, [selectedUser?.id]);
 
   const fetchClientes = async () => {
-    const { data } = await supabase
-      .from('clientes')
-      .select(`
-        id,
-        numero_cliente,
-        direccion,
-        cobrador_asignado_id,
-        profiles ( nombre_completo, telefono, foto_url, avatar_url, email ),
-        creditos ( id, monto_total, monto_diario, estado, semanas_autorizadas )
-      `)
-      .order('numero_cliente', { ascending: false });
+    setLoadingClientes(true);
+    setErrorClientes(null);
+    try {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select(`
+          id,
+          numero_cliente,
+          direccion,
+          cobrador_asignado_id,
+          profiles ( nombre_completo, telefono, foto_url, avatar_url, email ),
+          creditos ( id, monto_total, monto_diario, estado, semanas_autorizadas )
+        `)
+        .order('numero_cliente', { ascending: false })
+        .limit(200);
 
-    if (data) setClientes(data);
+      if (error) throw error;
+      if (data) setClientes(data);
+    } catch (err: any) {
+      console.error('Error al cargar clientes:', err);
+      setErrorClientes(err?.message || 'Error al cargar clientes');
+    } finally {
+      setLoadingClientes(false);
+    }
   };
 
   const fetchCobradores = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, nombre_completo')
-      .eq('rol', 'cobrador')
-      .order('nombre_completo', { ascending: true });
-    if (data) setCobradores(data);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, nombre_completo')
+        .eq('rol', 'cobrador')
+        .order('nombre_completo', { ascending: true });
+      if (data) setCobradores(data);
+    } catch (err) {
+      console.error('Error al cargar cobradores:', err);
+    }
   };
 
   const reasignarCobrador = async () => {
@@ -319,253 +336,329 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   };
 
   const imprimirEstado = async () => {
-  if (!selectedUser) return;
+    if (!selectedUser) return;
 
-  // Convertir logo a data URL para que se muestre en la ventana de impresión (blob URL)
-  let logoDataUrl = '';
-  try {
-    const res = await fetch('/logo.png');
-    const blob = await res.blob();
-    logoDataUrl = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    // Logo no se mostrará si falla el fetch
-  }
-  const fechaActual = new Date();
-  const fechaProximoPago = new Date(fechaActual);
-  
-  // Calcular próximo día hábil (lunes a viernes)
-  do {
-    fechaProximoPago.setDate(fechaProximoPago.getDate() + 1);
-  } while (fechaProximoPago.getDay() === 0 || fechaProximoPago.getDay() === 6);
+    // 1. Logo como data URL
+    let logoDataUrl = '';
+    try {
+      const res = await fetch('/logo.png');
+      const blob = await res.blob();
+      logoDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch {}
 
-  const fechaHoy = fechaActual.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-  const fechaPago = fechaProximoPago.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-  const diaPago = fechaProximoPago.toLocaleDateString('es-MX', { weekday: 'long' });
+    // 2. Pagos diarios de todos los créditos del cliente
+    const creditoIds = (selectedUser.creditos || []).map((c: any) => c.id).filter(Boolean);
+    const pagosPorCredito: Record<string, any[]> = {};
+    if (creditoIds.length > 0) {
+      const { data: pagos } = await supabase
+        .from('pagos_diarios')
+        .select('credito_id, fecha_esperada, pagado, fecha_pago')
+        .in('credito_id', creditoIds)
+        .order('fecha_esperada', { ascending: true });
+      for (const p of pagos || []) {
+        if (!pagosPorCredito[p.credito_id]) pagosPorCredito[p.credito_id] = [];
+        pagosPorCredito[p.credito_id].push(p);
+      }
+    }
 
-  const contenido = `
-    <html>
-      <head>
-        <title>Estado de Cuenta - ${selectedUser?.profiles?.nombre_completo}</title>
-        <style>
-          * { margin: 0; padding: 0; }
-          body { 
-            font-family: 'Arial', sans-serif; 
-            padding: 40px; 
-            color: #333;
-            background-image: 
-              repeating-linear-gradient(45deg, transparent, transparent 200px, rgba(220,38,38,0.03) 200px, rgba(220,38,38,0.03) 400px);
-          }
-          .watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-45deg);
-            font-size: 120px;
-            opacity: 0.05;
-            color: #dc2626;
-            font-weight: bold;
-            pointer-events: none;
-            z-index: 0;
-          }
-          .container {
-            position: relative;
-            z-index: 1;
-          }
-          .header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            border-bottom: 3px solid #dc2626; 
-            padding-bottom: 20px; 
-            margin-bottom: 30px;
-          }
-          .logo { width: 140px; height: auto; }
-          .header-text h1 { 
-            color: #dc2626; 
-            margin: 0; 
-            font-size: 32px;
-          }
-          .fecha { 
-            font-style: italic; 
-            color: #666; 
-            margin-top: 5px;
-            font-size: 12px;
-          }
-          .section {
-            margin-bottom: 25px;
-            border-left: 4px solid #dc2626;
-            padding-left: 15px;
-          }
-          .section-title {
-            font-weight: bold;
-            color: #dc2626;
-            font-size: 14px;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-            letter-spacing: 1px;
-          }
-          .info-row { 
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px; 
-            font-size: 15px;
-          }
-          .info-label {
-            font-weight: bold;
-            color: #333;
-            min-width: 200px;
-          }
-          .info-value {
-            text-align: right;
-            color: #666;
-            flex: 1;
-          }
-          .highlight {
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-          }
-          .amount {
-            font-size: 24px;
-            font-weight: bold;
-            color: #dc2626;
-          }
-          .footer {
-            border-top: 1px solid #ddd;
-            margin-top: 40px;
-            padding-top: 20px;
-            font-size: 11px;
-            color: #999;
-            text-align: center;
-          }
-          .btn-back {
-            display: none;
-            position: fixed;
-            top: 12px;
-            left: 12px;
-            background: #1f2937;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-            z-index: 999;
-          }
-          .btn-back-mobile {
-            display: none;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #1f2937;
-            color: white;
-            border: none;
-            padding: 18px 24px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 999;
-            border-top: 1px solid #374151;
-          }
-          @media screen and (min-width: 641px) {
-            .btn-back { display: block; }
-          }
-          @media screen and (max-width: 640px) {
-            .btn-back-mobile { display: block; }
-            body { padding-bottom: 80px; }
-          }
-          @media print {
-            .btn-back, .btn-back-mobile { display: none !important; }
-          }
-        </style>
-      </head>
-      <body>
-        <button class="btn-back" onclick="window.close()">← Cerrar</button>
-        <button class="btn-back-mobile" onclick="window.close()">← Regresar</button>
-        <div class="watermark">CrediCabs</div>
+    // 3. Cobrador
+    const cobrador = cobradores.find((c: any) => c.id === selectedUser.cobrador_asignado_id);
 
-        <div class="container">
-          <div class="header">
-            <div class="header-text">
-              <h1>Estado de Cuenta</h1>
-              <p class="fecha">Impreso el: ${fechaHoy}</p>
-            </div>
-            ${logoDataUrl ? `<img src="${logoDataUrl}" alt="CrediCabs Logo" class="logo" />` : '<div style="width:140px"></div>'}
+    const todayStr = new Date().toISOString().split('T')[0];
+    const fechaHoy = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const fmtFecha = (d: string) =>
+      new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' });
+
+    // 4. HTML por crédito
+    const creditosHTML = (selectedUser.creditos || []).map((c: any, idx: number) => {
+      const pagos      = pagosPorCredito[c.id] || [];
+      const pagados    = pagos.filter((p: any) => p.pagado).length;
+      const atrasados  = pagos.filter((p: any) => !p.pagado && p.fecha_esperada < todayStr).length;
+      const total      = pagos.length;
+      const pct        = total > 0 ? Math.round((pagados / total) * 100) : 0;
+      const mora       = atrasados * 50;
+      const montoPagado = pagados * Math.round(c.monto_diario || 0);
+      const saldoPend   = (total - pagados) * Math.round(c.monto_diario || 0);
+      const proximoPago = pagos.find((p: any) => !p.pagado);
+
+      const filas = pagos.map((p: any, i: number) => {
+        const atrasado  = !p.pagado && p.fecha_esperada < todayStr;
+        const esHoy     = p.fecha_esperada === todayStr;
+        const rowClass  = p.pagado ? 'row-pagado' : atrasado ? 'row-atrasado' : esHoy ? 'row-hoy' : '';
+        const badge     = p.pagado ? 'badge-ok' : atrasado ? 'badge-bad' : esHoy ? 'badge-hoy' : 'badge-pend';
+        const etiqueta  = p.pagado ? 'Pagado' : atrasado ? 'Atrasado' : esHoy ? 'Hoy' : 'Pendiente';
+        return `<tr class="${rowClass}">
+          <td class="num">${i + 1}</td>
+          <td>${fmtFecha(p.fecha_esperada)}</td>
+          <td class="t-right">$${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}</td>
+          <td><span class="badge ${badge}">${etiqueta}</span></td>
+          <td style="color:#15803d;">${p.pagado && p.fecha_pago ? fmtFecha(p.fecha_pago) : ''}</td>
+        </tr>`;
+      }).join('');
+
+      const multiCredito = (selectedUser.creditos || []).length > 1;
+
+      return `
+        ${idx > 0 ? '<div style="page-break-before:always;height:18px;"></div>' : ''}
+
+        ${multiCredito ? `<div style="font-size:9px;font-weight:700;color:#fff;background:#374151;display:inline-block;padding:3px 10px;border-radius:3px;margin-bottom:12px;letter-spacing:1px;text-transform:uppercase;">Crédito ${idx + 1} de ${(selectedUser.creditos || []).length}</div>` : ''}
+
+        <!-- Resumen -->
+        <div class="summary">
+          <div class="sum-card" style="--accent:#dc2626">
+            <div class="sum-lbl">Monto Total</div>
+            <div class="sum-val">$${(c.monto_total || 0).toLocaleString('es-MX')}</div>
+            <div class="sum-sub">$${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}/pago</div>
           </div>
-
-          <div class="section">
-            <div class="section-title">📋 Información del Cliente</div>
-            <div class="info-row">
-              <span class="info-label">Cliente:</span>
-              <span class="info-value">${selectedUser?.profiles?.nombre_completo}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">ID Cliente:</span>
-              <span class="info-value">${selectedUser?.numero_cliente}</span>
-            </div>
+          <div class="sum-card" style="--accent:#15803d">
+            <div class="sum-lbl">Pagado</div>
+            <div class="sum-val" style="color:#15803d;">${pagados}/${total}</div>
+            <div class="sum-sub">$${montoPagado.toLocaleString('es-MX')}</div>
           </div>
-
-          <div class="section">
-            <div class="section-title">💰 Información del Crédito</div>
-            <div class="info-row">
-              <span class="info-label">Crédito Total:</span>
-              <span class="info-value">$${selectedUser?.credito?.monto_total?.toLocaleString('es-MX')}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Pago Diario:</span>
-              <span class="info-value">$${Math.round(selectedUser?.credito?.monto_diario || 0).toLocaleString('es-MX')}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Estado:</span>
-              <span class="info-value">${(selectedUser?.credito?.estado || 'Activo').toUpperCase()}</span>
-            </div>
+          <div class="sum-card" style="--accent:${atrasados > 0 ? '#dc2626' : '#e5e7eb'}">
+            <div class="sum-lbl">Atrasados</div>
+            <div class="sum-val" style="color:${atrasados > 0 ? '#dc2626' : '#9ca3af'};">${atrasados}</div>
+            <div class="sum-sub">Saldo: $${saldoPend.toLocaleString('es-MX')}</div>
           </div>
-
-          <div class="section">
-            <div class="section-title">📅 Próximo Pago</div>
-            <div class="highlight">
-              <div class="info-row">
-                <span class="info-label">Fecha de Pago:</span>
-                <span class="info-value"><strong>${diaPago.toUpperCase()}, ${fechaPago}</strong></span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Monto a Pagar:</span>
-                <span class="info-value amount">$${Math.round(selectedUser?.credito?.monto_diario || 0).toLocaleString('es-MX')}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="footer">
-            <p>Este documento es un comprobante de su estado de cuenta en CrediCabs.</p>
-            <p>Para consultas, contacte a su cobrador asignado.</p>
+          <div class="sum-card" style="--accent:${mora > 0 ? '#d97706' : '#e5e7eb'}">
+            <div class="sum-lbl">Mora Acumulada</div>
+            <div class="sum-val" style="color:${mora > 0 ? '#d97706' : '#9ca3af'};">${mora > 0 ? '$' + mora.toLocaleString('es-MX') : '—'}</div>
+            <div class="sum-sub">${atrasados > 0 ? atrasados + ' día' + (atrasados > 1 ? 's' : '') : 'Sin mora'}</div>
           </div>
         </div>
-      </body>
-    </html>
-  `;
-  
-  const htmlCompleto = contenido + `
-    <script>
-      window.addEventListener('load', function() {
-        setTimeout(function() { window.print(); }, 300);
-      });
-    </script>
-  `;
-  const blob = new Blob([htmlCompleto], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if (!w) {
-    const a = document.createElement('a');
-    a.href = url; a.target = '_blank'; a.click();
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-};
+
+        <!-- Barra de progreso -->
+        <div class="prog">
+          <div class="prog-row">
+            <span style="color:#374151;font-weight:700;">${pct}% completado</span>
+            <span>${pagados} de ${total} pagos realizados</span>
+          </div>
+          <div class="prog-bg"><div class="prog-fg" style="width:${pct}%;"></div></div>
+        </div>
+
+        ${proximoPago ? `
+        <div class="next-pay">
+          <div>
+            <div class="next-pay-lbl">Próximo Pago Pendiente</div>
+            <div class="next-pay-fecha">${new Date(proximoPago.fecha_esperada + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+          </div>
+          <div class="next-pay-monto">$${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}</div>
+        </div>` : `
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:4px;padding:10px 16px;margin-bottom:18px;color:#15803d;font-weight:700;font-size:12px;">
+          ✓ Todos los pagos realizados — Crédito completado
+        </div>`}
+
+        <!-- Tabla de pagos -->
+        <div class="tbl-title">Detalle de Pagos</div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:32px;">#</th>
+              <th>Fecha Programada</th>
+              <th class="t-right">Monto</th>
+              <th>Estado</th>
+              <th>Fecha de Pago</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>`;
+    }).join('');
+
+    // Folio único
+    const folio = `EDC-${String(selectedUser?.numero_cliente || 0).padStart(4, '0')}-${new Date().getFullYear()}`;
+
+    // 5. HTML final — diseño profesional tipo documento financiero
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Estado de Cuenta – ${selectedUser?.profiles?.nombre_completo || 'Cliente'}</title>
+  <style>
+    @page { margin: 14mm 18mm; size: A4; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11.5px; color: #111; background: #fff; }
+
+    /* ── Marca de agua ── */
+    .wm { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-40deg);
+      font-size: 110px; font-weight: 900; color: #dc2626; opacity: .03; pointer-events: none;
+      z-index: 0; white-space: nowrap; letter-spacing: -2px; }
+
+    .doc { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; }
+
+    /* ── Encabezado ── */
+    .hdr { display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 12px; border-bottom: 2.5px solid #dc2626; margin-bottom: 0; }
+    .hdr-logo { height: 50px; width: auto; }
+    .hdr-brand { text-align: right; }
+    .hdr-brand-name { font-size: 20px; font-weight: 900; color: #dc2626; letter-spacing: -0.5px; }
+    .hdr-brand-sub { font-size: 9px; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+
+    /* ── Banda del documento ── */
+    .doc-band { background: #111; color: #fff; padding: 9px 16px;
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .doc-band-title { font-size: 13px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
+    .doc-band-meta { text-align: right; }
+    .doc-band-folio { font-size: 10px; color: #9ca3af; }
+    .doc-band-fecha { font-size: 10px; color: #d1d5db; margin-top: 1px; }
+
+    /* ── Ficha del cliente ── */
+    .cli-grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #e5e7eb; margin-bottom: 18px; }
+    .cli-col { padding: 11px 14px; }
+    .cli-col:first-child { border-right: 1px solid #e5e7eb; }
+    .cli-field { margin-bottom: 8px; }
+    .cli-field:last-child { margin-bottom: 0; }
+    .cli-lbl { font-size: 8px; color: #6b7280; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 2px; }
+    .cli-val { font-size: 12.5px; font-weight: 700; color: #111; }
+
+    /* ── Resumen (tarjetas) ── */
+    .summary { display: grid; grid-template-columns: repeat(4,1fr); border: 1px solid #e5e7eb; margin-bottom: 14px; }
+    .sum-card { padding: 10px 8px; text-align: center; position: relative; }
+    .sum-card + .sum-card { border-left: 1px solid #e5e7eb; }
+    .sum-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent, #e5e7eb); }
+    .sum-lbl { font-size: 8px; color: #9ca3af; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+    .sum-val { font-size: 17px; font-weight: 800; color: var(--accent, #111); }
+    .sum-sub { font-size: 9px; color: #9ca3af; margin-top: 2px; }
+
+    /* ── Barra de progreso ── */
+    .prog { margin-bottom: 18px; }
+    .prog-row { display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; margin-bottom: 4px; }
+    .prog-bg { background: #e5e7eb; height: 8px; border-radius: 99px; overflow: hidden; }
+    .prog-fg { height: 100%; background: linear-gradient(to right, #15803d, #22c55e); border-radius: 99px; }
+
+    /* ── Próximo pago ── */
+    .next-pay { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 4px;
+      padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .next-pay-lbl { font-size: 8px; color: #92400e; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; font-weight: 700; }
+    .next-pay-fecha { font-size: 13px; font-weight: 700; color: #78350f; }
+    .next-pay-monto { font-size: 22px; font-weight: 900; color: #dc2626; }
+
+    /* ── Tabla de pagos ── */
+    .tbl-title { font-size: 9px; font-weight: 700; color: #374151; text-transform: uppercase;
+      letter-spacing: 1px; padding: 0 0 6px 0; border-bottom: 1.5px solid #374151; margin-bottom: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px; }
+    thead tr { background: #f9fafb; }
+    th { padding: 6px 8px; text-align: left; font-size: 8.5px; font-weight: 700;
+      color: #6b7280; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 4.5px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr.row-atrasado td { background: #fff5f5; }
+    tr.row-hoy td { background: #eff6ff; }
+    tr.row-pagado td { color: #374151; }
+    .num { color: #9ca3af; font-size: 10px; }
+    .badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1.5px 6px; border-radius: 3px; }
+    .badge-ok  { color: #15803d; background: #dcfce7; }
+    .badge-bad { color: #b91c1c; background: #fee2e2; }
+    .badge-hoy { color: #1d4ed8; background: #dbeafe; }
+    .badge-pend{ color: #6b7280; background: #f3f4f6; }
+    .t-right { text-align: right; }
+
+    /* ── Firmas ── */
+    .sigs { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 28px; margin-bottom: 20px; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 6px; text-align: center; font-size: 9px; color: #6b7280; }
+
+    /* ── Pie ── */
+    .ft { border-top: 1px solid #e5e7eb; padding-top: 8px; display: flex;
+      justify-content: space-between; font-size: 8.5px; color: #9ca3af; }
+
+    /* ── Botón cerrar — solo pantalla ── */
+    .btn-c { position: fixed; top: 14px; right: 14px; background: #111; color: #fff;
+      border: none; padding: 8px 18px; border-radius: 6px; font-size: 12px; cursor: pointer;
+      z-index: 999; font-weight: 600; }
+    @media print { .btn-c { display: none !important; } }
+  </style>
+</head>
+<body>
+  <button class="btn-c" onclick="window.close()">✕ Cerrar</button>
+  <div class="wm">CrediCabs</div>
+
+  <div class="doc">
+
+    <!-- ── ENCABEZADO ── -->
+    <div class="hdr">
+      ${logoDataUrl ? `<img src="${logoDataUrl}" class="hdr-logo" alt="CrediCabs"/>` : `<span style="font-size:22px;font-weight:900;color:#dc2626;">CrediCabs</span>`}
+      <div class="hdr-brand">
+        <div class="hdr-brand-name">Credi Cab's</div>
+        <div class="hdr-brand-sub">Sistema de Créditos</div>
+      </div>
+    </div>
+
+    <!-- ── BANDA DEL DOCUMENTO ── -->
+    <div class="doc-band">
+      <div class="doc-band-title">Estado de Cuenta</div>
+      <div class="doc-band-meta">
+        <div class="doc-band-folio">Folio: ${folio}</div>
+        <div class="doc-band-fecha">${fechaHoy}</div>
+      </div>
+    </div>
+
+    <!-- ── FICHA DEL CLIENTE ── -->
+    <div class="cli-grid">
+      <div class="cli-col">
+        <div class="cli-field">
+          <div class="cli-lbl">Cliente</div>
+          <div class="cli-val">${selectedUser?.profiles?.nombre_completo || '—'}</div>
+        </div>
+        <div class="cli-field">
+          <div class="cli-lbl">No. de Cliente</div>
+          <div class="cli-val">${selectedUser?.numero_cliente || '—'}</div>
+        </div>
+        ${selectedUser?.profiles?.telefono ? `
+        <div class="cli-field">
+          <div class="cli-lbl">Teléfono</div>
+          <div class="cli-val">${selectedUser.profiles.telefono}</div>
+        </div>` : ''}
+      </div>
+      <div class="cli-col">
+        <div class="cli-field">
+          <div class="cli-lbl">Cobrador Asignado</div>
+          <div class="cli-val">${cobrador?.nombre_completo || '—'}</div>
+        </div>
+        ${selectedUser?.direccion ? `
+        <div class="cli-field">
+          <div class="cli-lbl">Dirección</div>
+          <div class="cli-val" style="font-size:11.5px;">${selectedUser.direccion}</div>
+        </div>` : ''}
+        <div class="cli-field">
+          <div class="cli-lbl">Fecha de emisión</div>
+          <div class="cli-val">${fechaHoy}</div>
+        </div>
+      </div>
+    </div>
+
+    ${creditosHTML}
+
+    <!-- ── FIRMAS ── -->
+    <div class="sigs">
+      <div class="sig-line">Firma del Cobrador</div>
+      <div class="sig-line">Firma del Cliente</div>
+    </div>
+
+    <!-- ── PIE ── -->
+    <div class="ft">
+      <span>Credi Cab's · Sistema de Créditos</span>
+      <span>Documento informativo · No tiene valor fiscal</span>
+      <span>Folio ${folio}</span>
+    </div>
+
+  </div>
+  <script>window.addEventListener('load',function(){setTimeout(function(){window.print();},400);});<\/script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (!w) {
+      const a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
 
   const filteredClientes = clientes.filter((cliente) => {
     const credito = cliente.creditos && cliente.creditos.length > 0 ? cliente.creditos[0] : null;
@@ -898,7 +991,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
       {/* ── FOOTER FIJO ── */}
       <div className="shrink-0 px-5 py-3 border-t border-gray-800 grid grid-cols-2 gap-2">
-        <Button className="bg-red-700 hover:bg-red-600 text-white font-bold text-xs h-9" onClick={imprimirEstado}>
+        <Button className="hidden md:flex bg-red-700 hover:bg-red-600 text-white font-bold text-xs h-9" onClick={imprimirEstado}>
           🖨 Imprimir Estado
         </Button>
         <Button variant="destructive" className="font-bold text-xs h-9" onClick={eliminarCliente} disabled={eliminando}>
@@ -938,7 +1031,17 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
       {/* ── MÓVIL: lista de tarjetas ── */}
       <div className="md:hidden divide-y divide-gray-800 max-h-[70vh] overflow-y-auto">
-        {filteredClientes.length === 0 ? (
+        {loadingClientes ? (
+          <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
+            <div className="w-5 h-5 border-2 border-gray-600 border-t-red-500 rounded-full animate-spin" />
+            <span className="text-sm">Cargando clientes...</span>
+          </div>
+        ) : errorClientes ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-red-400 text-sm mb-3">{errorClientes}</p>
+            <button onClick={fetchClientes} className="text-xs bg-gray-800 text-gray-300 px-4 py-2 rounded-full">Reintentar</button>
+          </div>
+        ) : filteredClientes.length === 0 ? (
           <p className="text-center py-10 text-gray-500 text-sm">No se encontraron resultados</p>
         ) : filteredClientes.map((cliente) => {
           const credito = cliente.creditos?.[0] || null;
