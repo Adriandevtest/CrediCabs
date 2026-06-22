@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { sendPushToCliente, sendPushToUserIds } from '@/lib/sendPush';
 
+const MORA_POR_DIA = 50;
+
 export async function POST(request: Request) {
   try {
     const { transferenciaId, pagoId, accion, mora = 0 } = await request.json();
@@ -10,12 +12,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    // Fallback hardcoded igual que create-client — env vars pueden no resolverse en Vercel
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://pnesuibfgtescgudkerf.supabase.co';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuZXN1aWJmZ3Rlc2NndWRrZXJmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTU4MjMyMSwiZXhwIjoyMDk1MTU4MzIxfQ.tmiI8NHQiGDnZkjRgz_tXwjY3kVjiP7g2JmqMp38BhM';
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
-    // Fetch transferencia + asesor del crédito
+    // Fetch transferencia completa: cliente, crédito, asesor y cobrador
     const { data: trans } = await supabaseAdmin
       .from('transferencias')
       .select('cliente_id, credito_id, monto, creditos(creado_por)')
@@ -24,37 +27,62 @@ export async function POST(request: Request) {
 
     const asesorId: string | null = (trans as any)?.creditos?.creado_por ?? null;
 
+    // Buscar cobrador asignado al cliente (necesario para notificarlo)
+    let cobradorId: string | null = null;
+    if (trans?.cliente_id) {
+      const { data: clienteRow } = await supabaseAdmin
+        .from('clientes')
+        .select('cobrador_asignado_id')
+        .eq('id', trans.cliente_id)
+        .single();
+      cobradorId = clienteRow?.cobrador_asignado_id ?? null;
+    }
+
     if (accion === 'aprobar') {
-      // Resolver qué pago marcar: usar pago_diario_id si existe,
-      // si no, buscar el primer pendiente del crédito (fallback robusto)
-      let pagoEfectivoId = pagoId || null;
-      if (!pagoEfectivoId && trans?.credito_id) {
-        const { data: nextPago } = await supabaseAdmin
+      const today = new Date().toISOString().split('T')[0];
+
+      // Marcar TODOS los pagos vencidos del crédito como pagados, igual que hace el cobrador.
+      // Si el cliente envió un comprobante que el admin aprobó, se entiende que cubre
+      // la cuota actual + la mora acumulada de días anteriores.
+      let pagosActualizados = 0;
+      if (trans?.credito_id) {
+        const { data: pagosVencidos } = await supabaseAdmin
           .from('pagos_diarios')
-          .select('id')
+          .select('id, fecha_esperada')
           .eq('credito_id', trans.credito_id)
           .eq('pagado', false)
-          .order('numero_dia', { ascending: true })
-          .limit(1)
-          .single();
-        pagoEfectivoId = nextPago?.id || null;
+          .lte('fecha_esperada', today)
+          .order('numero_dia', { ascending: true });
+
+        if (pagosVencidos && pagosVencidos.length > 0) {
+          for (const pago of pagosVencidos) {
+            const esHoy = pago.fecha_esperada === today;
+            const { error: errPago } = await supabaseAdmin
+              .from('pagos_diarios')
+              .update({ pagado: true, mora: esHoy ? 0 : MORA_POR_DIA })
+              .eq('id', pago.id);
+            if (errPago) throw errPago;
+            pagosActualizados++;
+          }
+        } else if (pagoId) {
+          // No hay vencidos pero viene un pagoId específico (pago de hoy sin atraso)
+          const { error: errPago } = await supabaseAdmin
+            .from('pagos_diarios')
+            .update({ pagado: true, mora: 0 })
+            .eq('id', pagoId);
+          if (errPago) throw errPago;
+          pagosActualizados++;
+        }
       }
 
-      if (pagoEfectivoId) {
-        const { error: pagoError } = await supabaseAdmin
-          .from('pagos_diarios')
-          .update({ pagado: true, mora: mora ?? 0 })
-          .eq('id', pagoEfectivoId);
-        if (pagoError) throw pagoError;
-      }
-
+      // Marcar transferencia como aprobada
       const { error } = await supabaseAdmin
         .from('transferencias')
         .update({ estado: 'aprobado' })
         .eq('id', transferenciaId);
       if (error) throw error;
 
-      // Verificar si era el último pago pendiente y liquidar el crédito
+      // Verificar si era el último pago y liquidar crédito
       if (trans?.credito_id) {
         const { count } = await supabaseAdmin
           .from('pagos_diarios')
@@ -69,18 +97,43 @@ export async function POST(request: Request) {
         }
       }
 
-      // Notify cliente
+      const montoFmt = `$${Number(trans?.monto).toLocaleString('es-MX')}`;
+
+      // Notificar al CLIENTE
       if (trans?.cliente_id) {
-        const msgAprobado = `Tu pago de $${Number(trans.monto).toLocaleString('es-MX')} fue verificado y aprobado.`;
+        const msgCliente = `Tu pago de ${montoFmt} fue verificado y aprobado. Ya está registrado en tu cuenta.`;
         await supabaseAdmin.from('notificaciones').insert({
           destinatario_id: trans.cliente_id,
           titulo: '¡Pago confirmado! ✓',
-          mensaje: msgAprobado,
+          mensaje: msgCliente,
           tipo: 'pago',
         });
-        sendPushToCliente(trans.cliente_id, '✅ ¡Pago confirmado!', msgAprobado).catch(() => {});
-        if (asesorId) sendPushToUserIds([asesorId], '✅ Pago aprobado', `Pago de $${Number(trans.monto).toLocaleString('es-MX')} aprobado.`).catch(() => {});
+        sendPushToCliente(trans.cliente_id, '✅ ¡Pago confirmado!', msgCliente).catch(() => {});
       }
+
+      // Notificar al COBRADOR — para que le aparezca el pago al abrir la app
+      if (cobradorId) {
+        const nombreCliente = trans?.cliente_id ? await supabaseAdmin
+          .from('profiles')
+          .select('nombre_completo')
+          .eq('id', trans.cliente_id)
+          .single()
+          .then(({ data }) => data?.nombre_completo || 'Un cliente') : 'Un cliente';
+        const msgCobrador = `${nombreCliente} realizó una transferencia de ${montoFmt} que fue aprobada por el admin.`;
+        await supabaseAdmin.from('notificaciones').insert({
+          destinatario_id: cobradorId,
+          titulo: 'Pago de transferencia aprobado',
+          mensaje: msgCobrador,
+          tipo: 'pago',
+        });
+        sendPushToUserIds([cobradorId], '💳 Pago aprobado', msgCobrador).catch(() => {});
+      }
+
+      // Notificar al ASESOR
+      if (asesorId) {
+        sendPushToUserIds([asesorId], '✅ Pago aprobado', `Pago de ${montoFmt} aprobado.`).catch(() => {});
+      }
+
     } else if (accion === 'rechazar') {
       const { error } = await supabaseAdmin
         .from('transferencias')
@@ -88,7 +141,8 @@ export async function POST(request: Request) {
         .eq('id', transferenciaId);
       if (error) throw error;
 
-      // Notify cliente
+      const montoFmt = `$${Number(trans?.monto).toLocaleString('es-MX')}`;
+
       if (trans?.cliente_id) {
         const msgRechazado = 'Tu comprobante no pudo ser verificado. Por favor contacta a tu cobrador.';
         await supabaseAdmin.from('notificaciones').insert({
@@ -98,8 +152,17 @@ export async function POST(request: Request) {
           tipo: 'info',
         });
         sendPushToCliente(trans.cliente_id, '❌ Comprobante rechazado', msgRechazado).catch(() => {});
-        if (asesorId) sendPushToUserIds([asesorId], '❌ Comprobante rechazado', `Un comprobante de $${Number(trans.monto).toLocaleString('es-MX')} fue rechazado.`).catch(() => {});
       }
+
+      if (asesorId) {
+        sendPushToUserIds([asesorId], '❌ Comprobante rechazado', `Un comprobante de ${montoFmt} fue rechazado.`).catch(() => {});
+      }
+
+      // Notificar al cobrador del rechazo también
+      if (cobradorId) {
+        sendPushToUserIds([cobradorId], '❌ Comprobante rechazado', `Un comprobante fue rechazado. El cliente debe pagar en efectivo.`).catch(() => {});
+      }
+
     } else {
       return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
     }
