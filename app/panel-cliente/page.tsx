@@ -111,7 +111,7 @@ export default function PanelCliente() {
       if (clienteData?.cobrador_asignado_id) {
         const { data: cob } = await supabase
           .from('profiles')
-          .select('nombre_completo, telefono, email')
+          .select('nombre_completo, telefono, email, avatar_url')
           .eq('id', clienteData.cobrador_asignado_id)
           .single();
         cobradorData = cob;
@@ -366,8 +366,11 @@ export default function PanelCliente() {
                   className="w-full bg-gray-900 rounded-2xl border border-gray-800 p-4 flex items-center justify-between active:bg-gray-800/60 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-black text-base shrink-0">
-                      {cobrador.nombre_completo?.[0]?.toUpperCase() || 'C'}
+                    <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden bg-red-600 flex items-center justify-center">
+                      {cobrador.avatar_url
+                        ? <img src={cobrador.avatar_url} alt={cobrador.nombre_completo} className="w-full h-full object-cover" />
+                        : <span className="text-white font-black text-base">{cobrador.nombre_completo?.[0]?.toUpperCase() || 'C'}</span>
+                      }
                     </div>
                     <div className="text-left">
                       <p className="text-[10px] text-gray-500 uppercase tracking-widest">Tu Cobrador</p>
@@ -786,10 +789,20 @@ export default function PanelCliente() {
               {cobrador ? (
                 <>
                   {/* Avatar grande */}
-                  <div className="w-24 h-24 bg-gradient-to-br from-red-600 to-red-800 rounded-full flex items-center justify-center shadow-2xl shadow-red-900/50 border-4 border-red-700/40">
-                    <span className="text-white font-black text-4xl">
-                      {cobrador.nombre_completo?.[0]?.toUpperCase() || 'C'}
-                    </span>
+                  <div className="w-24 h-24 rounded-full overflow-hidden shadow-2xl shadow-red-900/50 border-4 border-gray-700 shrink-0">
+                    {cobrador.avatar_url ? (
+                      <img
+                        src={cobrador.avatar_url}
+                        alt={cobrador.nombre_completo}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
+                        <span className="text-white font-black text-4xl">
+                          {cobrador.nombre_completo?.[0]?.toUpperCase() || 'C'}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-center">
