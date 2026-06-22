@@ -350,18 +350,19 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       });
     } catch {}
 
-    // 2. Pagos diarios de todos los créditos del cliente
+    // 2. Pagos diarios via API (service role bypassa RLS)
     const creditoIds = (selectedUser.creditos || []).map((c: any) => c.id).filter(Boolean);
     const pagosPorCredito: Record<string, any[]> = {};
     if (creditoIds.length > 0) {
-      const { data: pagos } = await supabase
-        .from('pagos_diarios')
-        .select('credito_id, fecha_esperada, pagado, fecha_pago')
-        .in('credito_id', creditoIds)
-        .order('fecha_esperada', { ascending: true });
-      for (const p of pagos || []) {
-        if (!pagosPorCredito[p.credito_id]) pagosPorCredito[p.credito_id] = [];
-        pagosPorCredito[p.credito_id].push(p);
+      try {
+        const res = await fetch(`/api/admin/pagos-creditos?ids=${creditoIds.join(',')}`, { cache: 'no-store' });
+        const json = await res.json();
+        for (const p of json.pagos || []) {
+          if (!pagosPorCredito[p.credito_id]) pagosPorCredito[p.credito_id] = [];
+          pagosPorCredito[p.credito_id].push(p);
+        }
+      } catch {
+        // Si falla, el ticket se imprime sin detalle de pagos
       }
     }
 
