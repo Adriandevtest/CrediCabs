@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { MORA_POR_DIA } from '../../lib/mora';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
@@ -93,39 +92,16 @@ export default function BandejaPage() {
   const cargarTransferencias = async () => {
     setLoadingTrans(true);
     try {
-      const { data: transData } = await supabase
-        .from('transferencias')
-        .select('*, creditos(monto_diario, pagos_diarios(fecha_esperada, pagado))')
-        .eq('estado', 'pendiente')
-        .order('created_at', { ascending: false });
-
-      if (transData && transData.length > 0) {
-        const ids = [...new Set(transData.map((t: any) => t.cliente_id))];
-        const { data: profData } = await supabase
-          .from('profiles')
-          .select('id, nombre_completo')
-          .in('id', ids);
-        const profMap = new Map((profData || []).map((p: any) => [p.id, p]));
-
-        const today = new Date().toISOString().split('T')[0];
-        setTransferencias(transData.map((t: any) => {
-          const pagos: any[] = t.creditos?.pagos_diarios || [];
-          const diasAtrasados = pagos.filter(
-            (p: any) => p.fecha_esperada < today && !p.pagado
-          ).length;
-          const moraCalculada = diasAtrasados * MORA_POR_DIA;
-          return {
-            ...t,
-            cliente_nombre: profMap.get(t.cliente_id)?.nombre_completo || 'Cliente',
-            _moraReal: moraCalculada,
-            _diasAtraso: diasAtrasados,
-          };
-        }));
-      } else {
-        setTransferencias([]);
-      }
+      // Usamos API route con service role para evitar bloqueos de RLS.
+      // El cliente (panel-cliente) no tiene sesión Supabase auth, por lo que la
+      // tabla transferencias puede no ser visible con el JWT del admin.
+      const res = await fetch('/api/admin/transferencias-pendientes');
+      if (!res.ok) throw new Error('Error al cargar transferencias');
+      const { transferencias: data } = await res.json();
+      setTransferencias(data || []);
     } catch (error) {
       console.error(error);
+      setTransferencias([]);
     } finally {
       setLoadingTrans(false);
     }
