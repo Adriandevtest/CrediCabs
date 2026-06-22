@@ -24,6 +24,7 @@ export default function BandejaPage() {
   // ── Transferencias ──────────────────────────────────────────
   const [transferencias, setTransferencias] = useState<any[]>([]);
   const [loadingTrans, setLoadingTrans] = useState(false);
+  const [errorTrans, setErrorTrans] = useState<string | null>(null);
   const [selectedTrans, setSelectedTrans] = useState<any | null>(null);
   const [procesandoTrans, setProcesandoTrans] = useState(false);
   const [transLightbox, setTransLightbox] = useState(false);
@@ -91,16 +92,15 @@ export default function BandejaPage() {
 
   const cargarTransferencias = async () => {
     setLoadingTrans(true);
+    setErrorTrans(null);
     try {
-      // Usamos API route con service role para evitar bloqueos de RLS.
-      // El cliente (panel-cliente) no tiene sesión Supabase auth, por lo que la
-      // tabla transferencias puede no ser visible con el JWT del admin.
-      const res = await fetch('/api/admin/transferencias-pendientes');
-      if (!res.ok) throw new Error('Error al cargar transferencias');
-      const { transferencias: data } = await res.json();
-      setTransferencias(data || []);
-    } catch (error) {
+      const res = await fetch('/api/admin/transferencias-pendientes', { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Error al cargar transferencias');
+      setTransferencias(json.transferencias || []);
+    } catch (error: any) {
       console.error(error);
+      setErrorTrans(error.message || 'Error desconocido');
       setTransferencias([]);
     } finally {
       setLoadingTrans(false);
@@ -285,7 +285,7 @@ export default function BandejaPage() {
             )}
           </button>
           <button
-            onClick={() => setBandejaTab('transferencias')}
+            onClick={() => { setBandejaTab('transferencias'); cargarTransferencias(); }}
             className={`flex-1 md:flex-none md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
               bandejaTab === 'transferencias'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40'
@@ -357,6 +357,18 @@ export default function BandejaPage() {
 
             {loadingTrans ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4"><LumaSpin /></div>
+            ) : errorTrans ? (
+              <div className="bg-red-950/30 border border-red-800/50 p-6 rounded-xl text-center">
+                <i className="fa-solid fa-triangle-exclamation text-red-500 text-3xl mb-3 block" />
+                <p className="text-red-400 font-bold mb-1">Error al cargar transferencias</p>
+                <p className="text-red-600 text-xs mb-4 font-mono">{errorTrans}</p>
+                <button
+                  onClick={cargarTransferencias}
+                  className="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                >
+                  <i className="fa-solid fa-rotate mr-2" />Reintentar
+                </button>
+              </div>
             ) : transferencias.length === 0 ? (
               <div className="bg-gray-900 border border-gray-800 p-10 rounded-xl text-center">
                 <i className="fa-solid fa-building-columns text-gray-700 text-4xl mb-3 block" />
@@ -372,7 +384,7 @@ export default function BandejaPage() {
                   const hora = new Date(trans.created_at).toLocaleTimeString('es-MX', {
                     hour: '2-digit', minute: '2-digit',
                   });
-                  const cuota = trans.creditos?.monto_diario || 0;
+                  const cuota = trans._cuota || trans.creditos?.monto_diario || 0;
                   const mora = trans._moraReal ?? 0;
                   const diasAtraso = trans._diasAtraso ?? 0;
                   return (
