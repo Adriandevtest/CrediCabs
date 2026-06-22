@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Checkbox } from "./ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Button } from "./ui/button";
@@ -16,6 +16,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [eliminando, setEliminando] = useState(false);
   const [pinEliminarOpen, setPinEliminarOpen] = useState(false);
+  const pendingDeleteRef = useRef<any>(null);
   const [verMas, setVerMas] = useState(false);
   const [detalleExtra, setDetalleExtra] = useState<any>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
@@ -282,26 +283,32 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
   const eliminarCliente = async () => {
     if (!selectedUser) return;
+    // Guardar referencia antes de cerrar el Dialog padre.
+    // El Dialog de Radix tiene un focus trap que impide que el PIN modal
+    // reciba foco en móvil; cerrándolo primero el teclado abre sin problema.
+    pendingDeleteRef.current = selectedUser;
+    setSelectedUser(null);
     setPinEliminarOpen(true);
   };
 
   const confirmarEliminarCliente = async () => {
-    if (!selectedUser) return;
+    const user = pendingDeleteRef.current;
+    if (!user) return;
 
     setEliminando(true);
     try {
-      const creditoIds = (selectedUser.creditos || []).map((c: any) => c.id);
+      const creditoIds = (user.creditos || []).map((c: any) => c.id);
       if (creditoIds.length > 0) {
         const { error: errorPagos } = await supabase.from('pagos_diarios').delete().in('credito_id', creditoIds);
         if (errorPagos) throw errorPagos;
       }
-      const { error: errorCreditos } = await supabase.from('creditos').delete().eq('cliente_id', selectedUser.id);
+      const { error: errorCreditos } = await supabase.from('creditos').delete().eq('cliente_id', user.id);
       if (errorCreditos) throw errorCreditos;
-      const { error: errorCliente } = await supabase.from('clientes').delete().eq('id', selectedUser.id);
+      const { error: errorCliente } = await supabase.from('clientes').delete().eq('id', user.id);
       if (errorCliente) throw errorCliente;
 
       alert('Cliente eliminado correctamente.');
-      setSelectedUser(null);
+      pendingDeleteRef.current = null;
       fetchClientes();
     } catch (error) {
       console.error('Error al eliminar cliente:', error);

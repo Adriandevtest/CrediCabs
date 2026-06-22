@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
@@ -29,6 +29,7 @@ export default function EquipoPage() {
   const [resetting, setResetting] = useState(false);
   const [despidiendo, setDespidiendo] = useState(false);
   const [pinDespedirOpen, setPinDespedirOpen] = useState(false);
+  const pendingDespedirRef = useRef<any>(null);
   const [clientesAsignados, setClientesAsignados] = useState<any[]>([]);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
 
@@ -52,24 +53,28 @@ export default function EquipoPage() {
 
   const handleDespedir = () => {
     if (!selectedMember) return;
+    // Guardar referencia y cerrar el Dialog padre antes de abrir PIN modal.
+    // El focus trap de Radix bloquea el teclado en móvil si el Dialog sigue abierto.
+    pendingDespedirRef.current = selectedMember;
+    setIsDetailsOpen(false);
     setPinDespedirOpen(true);
   };
 
   const confirmarDespedir = async () => {
-    if (!selectedMember) return;
+    const member = pendingDespedirRef.current;
+    if (!member) return;
     setDespidiendo(true);
     try {
-      // Eliminar del perfil
       const { error } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', selectedMember.id);
+        .eq('id', member.id);
 
       if (error) throw error;
 
-      alert(`✅ ${selectedMember.nombre_completo} ha sido eliminado del equipo.`);
+      alert(`✅ ${member.nombre_completo} ha sido eliminado del equipo.`);
+      pendingDespedirRef.current = null;
       setSelectedMember(null);
-      setIsDetailsOpen(false);
       fetchEquipo(); // Recargar lista
     } catch (error: any) {
       alert('❌ Error al despedir: ' + error.message);

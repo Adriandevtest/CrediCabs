@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import AdminPinModal from './AdminPinModal';
 
@@ -12,6 +12,7 @@ interface Cobrador {
 export default function RegisterClientForm({ cobradores, onSuccess }: { cobradores: Cobrador[], onSuccess?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
@@ -25,8 +26,10 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
     fecha_inicio: new Date().toISOString().split('T')[0]
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // type="button" + reportValidity() = validación HTML5 sin pasar por form submit,
+  // lo que mantiene el gesto de usuario intacto para que el teclado abra en móvil
+  const handleClickAutorizar = () => {
+    if (!formRef.current?.reportValidity()) return;
     setPinOpen(true);
   };
 
@@ -71,7 +74,7 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-6 md:p-8 bg-gray-900 rounded-xl shadow-2xl border border-red-900 flex flex-col gap-4 w-full">
+    <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="p-6 md:p-8 bg-gray-900 rounded-xl shadow-2xl border border-red-900 flex flex-col gap-4 w-full">
       <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 border-l-4 border-yellow-500 pl-3">
         Nuevo Cliente
       </h2>
@@ -167,7 +170,7 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
         </select>
       </div>
 
-      <button disabled={loading} className="w-full bg-red-600 hover:bg-red-700 transition-colors p-4 rounded-lg text-white font-bold mt-4 shadow-lg shadow-red-900/50">
+      <button type="button" disabled={loading} onClick={handleClickAutorizar} className="w-full bg-red-600 hover:bg-red-700 transition-colors p-4 rounded-lg text-white font-bold mt-4 shadow-lg shadow-red-900/50">
         {loading ? 'Procesando...' : (
           <span className="flex items-center justify-center gap-2">
             <i className="fa-solid fa-shield-halved" />
