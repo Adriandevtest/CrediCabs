@@ -25,8 +25,9 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   const [editando, setEditando] = useState(false);
   const [editForm, setEditForm] = useState({ nombre_completo: '', telefono: '', direccion: '' });
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
-  const [editCredito, setEditCredito] = useState({ monto_total: 0, num_pagos: 28 });
-  const [guardandoCredito, setGuardandoCredito] = useState(false);
+  const [editCreditForms, setEditCreditForms] = useState<Record<string, { monto_total: number; num_pagos: number }>>({});
+  const [guardandoCreditoId, setGuardandoCreditoId] = useState<string | null>(null);
+  const [expandedCreditId, setExpandedCreditId] = useState<string | null>(null);
   const [showNuevoCredito, setShowNuevoCredito] = useState(false);
   const [nuevoCredito, setNuevoCredito] = useState({ monto_total: 0, num_pagos: 28, tasa: 0 });
   const [agregandoCredito, setAgregandoCredito] = useState(false);
@@ -51,13 +52,13 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       setEditando(false);
       setShowNuevoCredito(false);
       setNuevoCredito({ monto_total: 0, num_pagos: 28, tasa: 0 });
-      const numPagos = [28, 37].includes(selectedUser.credito?.semanas_autorizadas)
-        ? selectedUser.credito.semanas_autorizadas
-        : 28;
-      setEditCredito({
-        monto_total: selectedUser.credito?.monto_total || 0,
-        num_pagos: numPagos,
-      });
+      setExpandedCreditId(null);
+      const forms: Record<string, { monto_total: number; num_pagos: number }> = {};
+      for (const c of (selectedUser.creditos || [])) {
+        const numPagos = [28, 37].includes(c.semanas_autorizadas) ? c.semanas_autorizadas : 28;
+        forms[c.id] = { monto_total: c.monto_total || 0, num_pagos: numPagos };
+      }
+      setEditCreditForms(forms);
     }
   }, [selectedUser?.id]);
 
@@ -219,19 +220,20 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     }
   };
 
-  const guardarCredito = async () => {
-    if (!selectedUser?.credito?.id) return;
-    if (!confirm(`¿Actualizar el crédito a $${editCredito.monto_total.toLocaleString('es-MX')} con ${editCredito.num_pagos} pagos diarios? Se eliminará el calendario anterior.`)) return;
+  const guardarCredito = async (creditoId: string) => {
+    const form = editCreditForms[creditoId];
+    if (!form) return;
+    if (!confirm(`¿Actualizar el crédito a $${form.monto_total.toLocaleString('es-MX')} con ${form.num_pagos} pagos diarios? Se eliminará el calendario anterior.`)) return;
 
-    setGuardandoCredito(true);
+    setGuardandoCreditoId(creditoId);
     try {
       const res = await fetch('/api/admin/update-credit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          credito_id: selectedUser.credito.id,
-          monto_total: editCredito.monto_total,
-          num_pagos: editCredito.num_pagos,
+          credito_id: creditoId,
+          monto_total: form.monto_total,
+          num_pagos: form.num_pagos,
         }),
       });
 
@@ -245,18 +247,21 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
       setSelectedUser((prev: any) => ({
         ...prev,
-        credito: {
-          ...prev.credito,
-          monto_total: editCredito.monto_total,
-          semanas_autorizadas: editCredito.num_pagos,
-          monto_diario: monto_por_pago,
-        },
+        creditos: (prev.creditos || []).map((c: any) =>
+          c.id === creditoId
+            ? { ...c, monto_total: form.monto_total, semanas_autorizadas: form.num_pagos, monto_diario: monto_por_pago }
+            : c
+        ),
+        credito: prev.credito?.id === creditoId
+          ? { ...prev.credito, monto_total: form.monto_total, semanas_autorizadas: form.num_pagos, monto_diario: monto_por_pago }
+          : prev.credito,
       }));
+      setExpandedCreditId(null);
       fetchClientes();
     } catch (error: any) {
       alert('Error: ' + error.message);
     } finally {
-      setGuardandoCredito(false);
+      setGuardandoCreditoId(null);
     }
   };
 
@@ -702,37 +707,110 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       {/* ── CONTENIDO SCROLLABLE ── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
-        {/* 1. CRÉDITOS — tarjetas por crédito con acciones de estado */}
+        {/* 1. CRÉDITOS — tarjetas por crédito con edición inline */}
         <section className="space-y-2">
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Créditos Activos</p>
-          {(selectedUser?.creditos || []).filter((c: any) => c.estado !== 'completado').length === 0 && (
-            <p className="text-gray-500 text-sm">Sin créditos activos.</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">
+            Créditos ({(selectedUser?.creditos || []).length})
+          </p>
+          {(selectedUser?.creditos || []).length === 0 && (
+            <p className="text-gray-500 text-sm">Sin créditos registrados.</p>
           )}
-          {(selectedUser?.creditos || []).filter((c: any) => c.estado !== 'completado').map((c: any, i: number) => (
-            <div key={c.id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-white font-bold text-sm">${c.monto_total?.toLocaleString('es-MX')}</p>
-                  <p className="text-gray-400 text-[10px]">
-                    Crédito {i + 1} · ${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}/día · {c.semanas_autorizadas} pagos
-                  </p>
+          {(selectedUser?.creditos || []).map((c: any, i: number) => {
+            const isLiquidado = c.estado === 'completado' || c.estado === 'liquidado';
+            const isExpanded = expandedCreditId === c.id;
+            const isGuardando = guardandoCreditoId === c.id;
+            const form = editCreditForms[c.id] || { monto_total: c.monto_total || 0, num_pagos: 28 };
+            return (
+              <div key={c.id} className={`border rounded-xl p-3 space-y-2 ${isLiquidado ? 'bg-gray-900/40 border-gray-700/50' : 'bg-gray-800/60 border-gray-700'}`}>
+                {/* Cabecera de la tarjeta */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`font-bold text-sm ${isLiquidado ? 'text-gray-400' : 'text-white'}`}>
+                        ${c.monto_total?.toLocaleString('es-MX')}
+                      </p>
+                      <span className="text-[9px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded-full">
+                        Crédito {i + 1}
+                      </span>
+                    </div>
+                    <p className="text-gray-400 text-[10px] mt-0.5">
+                      ${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}/día · {c.semanas_autorizadas} pagos
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge
+                      variant={c.estado === 'atrasado' ? 'destructive' : isLiquidado ? 'secondary' : 'default'}
+                      className="text-[10px]"
+                    >
+                      {c.estado || 'activo'}
+                    </Badge>
+                    {!isLiquidado && (
+                      <button
+                        onClick={() => setExpandedCreditId(isExpanded ? null : c.id)}
+                        className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                      >
+                        {isExpanded ? 'Cerrar' : '✏️'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <Badge variant={c.estado === 'atrasado' ? 'destructive' : 'default'} className="shrink-0 text-[10px]">
-                  {c.estado || 'activo'}
-                </Badge>
+
+                {/* Formulario de edición inline */}
+                {isExpanded && (
+                  <div className="space-y-2 pt-2 border-t border-gray-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Monto total ($)</label>
+                        <input
+                          type="number" min={1} value={form.monto_total}
+                          onChange={e => setEditCreditForms(f => ({ ...f, [c.id]: { ...f[c.id], monto_total: Number(e.target.value) } }))}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Esquema</label>
+                        <select
+                          value={form.num_pagos}
+                          onChange={e => setEditCreditForms(f => ({ ...f, [c.id]: { ...f[c.id], num_pagos: Number(e.target.value) } }))}
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500"
+                        >
+                          <option value={28}>28 pagos (~6 sem)</option>
+                          <option value={37}>37 pagos (~8 sem)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="bg-gray-800/50 rounded-lg px-3 py-2 flex justify-between text-xs">
+                      <span className="text-gray-400">Pago diario estimado</span>
+                      <span className="text-white font-bold">
+                        ${form.monto_total > 0 ? Math.round(form.monto_total / form.num_pagos).toLocaleString('es-MX') : '0'}
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => guardarCredito(c.id)}
+                      disabled={isGuardando || form.monto_total <= 0}
+                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold"
+                    >
+                      {isGuardando ? 'Actualizando...' : 'Actualizar Crédito'}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Botones de estado (solo créditos no liquidados) */}
+                {!isLiquidado && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button size="sm" variant="destructive" className="text-xs h-8"
+                      onClick={() => updateEstado(c.id, 'atrasado')}>
+                      ⚠ Atrasado
+                    </Button>
+                    <Button size="sm" variant="secondary" className="text-xs h-8"
+                      onClick={() => updateEstado(c.id, 'activo')}>
+                      ✓ Activo
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" variant="destructive" className="text-xs h-8"
-                  onClick={() => updateEstado(c.id, 'atrasado')}>
-                  ⚠ Atrasado
-                </Button>
-                <Button size="sm" variant="secondary" className="text-xs h-8"
-                  onClick={() => updateEstado(c.id, 'activo')}>
-                  ✓ Activo
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
 
         {/* 2. INFO CLIENTE */}
@@ -822,40 +900,6 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
             </Button>
           </div>
         </section>
-
-        {/* 4. EDITAR CRÉDITO (primer crédito activo) */}
-        {selectedUser?.credito && (
-          <section className="space-y-2">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Editar Crédito Principal</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Monto total ($)</label>
-                <input type="number" min={1} value={editCredito.monto_total}
-                  onChange={e => setEditCredito(f => ({ ...f, monto_total: Number(e.target.value) }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Esquema de pago</label>
-                <select value={editCredito.num_pagos}
-                  onChange={e => setEditCredito(f => ({ ...f, num_pagos: Number(e.target.value) }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500">
-                  <option value={28}>28 pagos (~6 sem)</option>
-                  <option value={37}>37 pagos (~8 sem)</option>
-                </select>
-              </div>
-            </div>
-            <div className="bg-gray-800/50 rounded-lg px-3 py-2 flex justify-between text-xs">
-              <span className="text-gray-400">Pago diario estimado</span>
-              <span className="text-white font-bold">
-                ${editCredito.monto_total > 0 ? Math.round(editCredito.monto_total / editCredito.num_pagos).toLocaleString('es-MX') : '0'}
-              </span>
-            </div>
-            <Button onClick={guardarCredito} disabled={guardandoCredito || editCredito.monto_total <= 0}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold">
-              {guardandoCredito ? 'Actualizando...' : 'Actualizar Crédito'}
-            </Button>
-          </section>
-        )}
 
         {/* 5. NUEVO CRÉDITO */}
         <section className="space-y-2">
