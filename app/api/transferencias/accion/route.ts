@@ -37,6 +37,12 @@ export async function POST(request: Request) {
       cobradorId = clienteRow?.cobrador_asignado_id ?? null;
     }
 
+    const broadcastHeaders = {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    };
+
     if (accion === 'aprobar') {
       const today = new Date().toISOString().split('T')[0];
 
@@ -100,16 +106,18 @@ export async function POST(request: Request) {
 
       // Broadcast en tiempo real — AWAIT obligatorio: en Vercel la función se cierra
       // al devolver la respuesta y un fetch sin await nunca se completa.
-      const broadcastHeaders = {
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-      };
       const broadcastMessages: { topic: string; event: string; payload: object }[] = [
-        { topic: 'admin-pagos', event: 'pago_aprobado', payload: { cliente_id: trans?.cliente_id } },
+        { topic: 'admin-pagos',  event: 'pago_aprobado', payload: {} },
+        { topic: 'notif-admin',  event: 'nueva_notif',   payload: {} },
       ];
-      if (trans?.cliente_id) broadcastMessages.push({ topic: `pagos-cliente-${trans.cliente_id}`, event: 'pago_aprobado', payload: {} });
-      if (cobradorId)        broadcastMessages.push({ topic: `pagos-cobrador-${cobradorId}`, event: 'pago_aprobado', payload: {} });
+      if (trans?.cliente_id) {
+        broadcastMessages.push({ topic: `pagos-cliente-${trans.cliente_id}`, event: 'pago_aprobado', payload: {} });
+        broadcastMessages.push({ topic: `notif-${trans.cliente_id}`,         event: 'nueva_notif',   payload: {} });
+      }
+      if (cobradorId) {
+        broadcastMessages.push({ topic: `pagos-cobrador-${cobradorId}`, event: 'pago_aprobado', payload: {} });
+        broadcastMessages.push({ topic: `notif-${cobradorId}`,          event: 'nueva_notif',   payload: {} });
+      }
       try {
         await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
           method: 'POST', headers: broadcastHeaders,
@@ -179,6 +187,20 @@ export async function POST(request: Request) {
       // Notificar al cobrador del rechazo también
       if (cobradorId) {
         sendPushToUserIds([cobradorId], '❌ Comprobante rechazado', `Un comprobante fue rechazado. El cliente debe pagar en efectivo.`).catch(() => {});
+      }
+
+      // Broadcast de rechazo (para que NotifBell actualice en tiempo real)
+      const rechazoBroadcast: { topic: string; event: string; payload: object }[] = [];
+      if (trans?.cliente_id) rechazoBroadcast.push({ topic: `notif-${trans.cliente_id}`, event: 'nueva_notif', payload: {} });
+      if (cobradorId)        rechazoBroadcast.push({ topic: `notif-${cobradorId}`,        event: 'nueva_notif', payload: {} });
+      rechazoBroadcast.push({ topic: 'notif-admin', event: 'nueva_notif', payload: {} });
+      if (rechazoBroadcast.length) {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
+            method: 'POST', headers: broadcastHeaders,
+            body: JSON.stringify({ messages: rechazoBroadcast }),
+          });
+        } catch {}
       }
 
     } else {

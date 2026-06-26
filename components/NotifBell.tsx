@@ -93,23 +93,26 @@ export function NotifBell({ filterRol, filterId, storageKey }: Props) {
     // Carga inicial
     load(false).then(() => { initialized.current = true; });
 
-    const chName = `notif_${storageKey}_${Math.random().toString(36).slice(2)}`;
-    const ch = supabase
-      .channel(chName)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notificaciones' },
-        () => load(true)   // re-consulta siempre (no depende de payload.new)
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'notificaciones' },
-        () => load(false)
-      )
+    const uid = Math.random().toString(36).slice(2);
+
+    // postgres_changes: funciona si notificaciones está publicada en Realtime
+    const chPg = supabase
+      .channel(`notif_pg_${uid}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones' }, () => load(true))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notificaciones' }, () => load(false))
+      .subscribe();
+
+    // Broadcast: canal garantizado que llega aunque postgres_changes falle.
+    // El servidor envía a notif-${id} (para clientes/cobradores) o notif-admin.
+    const broadcastTopic = filterId ? `notif-${filterId}` : 'notif-admin';
+    const chBc = supabase
+      .channel(broadcastTopic)
+      .on('broadcast', { event: 'nueva_notif' }, () => load(true))
       .subscribe();
 
     return () => {
-      supabase.removeChannel(ch);
+      supabase.removeChannel(chPg);
+      supabase.removeChannel(chBc);
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, [load, filterRol, filterId, storageKey]);
