@@ -67,7 +67,13 @@ export default function Home() {
   const verificarAccesoYDatos = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/login'); return; }
+      if (!user) {
+        // Si es un cliente con sesión local (no usa Supabase Auth), mandarlo a su panel
+        const clienteId = typeof window !== 'undefined' ? localStorage.getItem('cliente_id') : null;
+        if (clienteId) { router.push('/panel-cliente'); return; }
+        router.push('/login');
+        return;
+      }
 
       const { data: profile, error } = await supabase
         .from('profiles')

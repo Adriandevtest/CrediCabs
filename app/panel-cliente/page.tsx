@@ -131,17 +131,7 @@ export default function PanelCliente() {
     setClienteId(id);
     cargarDatos(id);
 
-    // postgres_changes: funciona si la tabla tiene Realtime habilitado en Supabase
-    const chPg = supabase
-      .channel(`cliente-pagos-rt-${id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
-        setPagoReciente(true);
-        setTimeout(() => setPagoReciente(false), 4000);
-        cargarDatos(id);
-      })
-      .subscribe();
-
-    // Broadcast: el API envía esto al aprobar → no depende de RLS ni publicación
+    // Broadcast: el API envía esto al aprobar → canal principal
     const chBc = supabase
       .channel(`pagos-cliente-${id}`)
       .on('broadcast', { event: 'pago_aprobado' }, () => {
@@ -151,9 +141,24 @@ export default function PanelCliente() {
       })
       .subscribe();
 
+    // postgres_changes: funciona si pagos_diarios está publicada en Realtime
+    const chPg = supabase
+      .channel(`cliente-pagos-rt-${id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
+        setPagoReciente(true);
+        setTimeout(() => setPagoReciente(false), 4000);
+        cargarDatos(id);
+      })
+      .subscribe();
+
+    // Polling cada 12 s — respaldo garantizado para Capacitor/Android donde
+    // el WebSocket de Realtime puede no establecerse correctamente
+    const poll = setInterval(() => cargarDatos(id), 12000);
+
     return () => {
       supabase.removeChannel(chPg);
       supabase.removeChannel(chBc);
+      clearInterval(poll);
     };
   }, [router, cargarDatos]);
 
