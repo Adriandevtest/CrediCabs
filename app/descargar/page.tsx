@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Descarga la aplicación CrediCabs para gestionar tus créditos desde tu celular.',
 };
 
-const APK_URL = 'https://pnesuibfgtescgudkerf.supabase.co/storage/v1/object/public/expedientes/app/credicabs.apk';
+const APK_URL = 'https://pnesuibfgtescgudkerf.supabase.co/storage/v1/object/public/expedientes/app/Credicabs v1.2.apk';
 
 const features = [
   { icon: 'fa-bolt',          title: 'Pagos al instante',     desc: 'Registra y confirma pagos en segundos desde cualquier lugar.' },
