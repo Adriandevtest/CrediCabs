@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     // 4. Calcular interés y crear crédito (esquema diario: 28 o 37 pagos de Lunes a Viernes)
     const tasaPorcentaje = parseFloat(tasa_interes_porcentaje?.toString() || '0');
     const interesTotal = monto_total * (tasaPorcentaje / 100);
-    const cuotaDiaria = (monto_total + interesTotal) / semanas_autorizadas;
+    const cuotaDiaria = Math.ceil((monto_total + interesTotal) / semanas_autorizadas);
 
     const { data: creditoData, error: creditoError } = await supabaseAdmin
       .from('creditos')

@@ -168,7 +168,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     try {
       const tasa = nuevoCredito.tasa;
       const interesTotal = nuevoCredito.monto_total * (tasa / 100);
-      const cuotaDiaria = (nuevoCredito.monto_total + interesTotal) / nuevoCredito.num_pagos;
+      const cuotaDiaria = Math.ceil((nuevoCredito.monto_total + interesTotal) / nuevoCredito.num_pagos);
 
       const { data: creditoData, error: creditoError } = await supabase
         .from('creditos')

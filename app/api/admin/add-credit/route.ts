@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const tasaPorcentaje = parseFloat(tasa_interes_porcentaje?.toString() || '0');
     const interesTotal = monto_total * (tasaPorcentaje / 100);
-    const cuotaDiaria = (monto_total + interesTotal) / num_pagos;
+    const cuotaDiaria = Math.ceil((monto_total + interesTotal) / num_pagos);
 
     const { data: creditoData, error: creditoError } = await supabaseAdmin
       .from('creditos')

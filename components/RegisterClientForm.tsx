@@ -170,6 +170,32 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
         </select>
       </div>
 
+      {formData.monto > 0 && formData.semanas > 0 && (() => {
+        const interes = formData.monto * (formData.tasa_interes / 100);
+        const pagodiario = Math.ceil((formData.monto + interes) / formData.semanas);
+        return (
+          <div className="bg-gray-950 p-3 rounded-lg border border-gray-700 text-sm space-y-1">
+            <p className="text-gray-500 text-[10px] uppercase tracking-wider mb-2">Desglose del crédito</p>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">Capital</span>
+              <span className="text-white font-semibold">${formData.monto.toLocaleString('es-MX')}</span>
+            </div>
+            <div className="flex justify-between items-center text-yellow-500/80">
+              <span>+ Interés ({formData.tasa_interes}%)</span>
+              <span className="font-semibold">${interes.toLocaleString('es-MX')}</span>
+            </div>
+            <div className="border-t border-gray-700 pt-1 flex justify-between items-center">
+              <span className="text-gray-300 font-bold">Total a pagar</span>
+              <span className="text-white font-black">${(formData.monto + interes).toLocaleString('es-MX')}</span>
+            </div>
+            <div className="flex justify-between items-center mt-1 pt-1 border-t border-gray-700">
+              <span className="text-gray-400">Pago diario ({formData.semanas} días)</span>
+              <span className="text-yellow-400 font-black text-base">${pagodiario.toLocaleString('es-MX')}</span>
+            </div>
+          </div>
+        );
+      })()}
+
       <button type="button" disabled={loading} onClick={handleClickAutorizar} className="w-full bg-red-600 hover:bg-red-700 transition-colors p-4 rounded-lg text-white font-bold mt-4 shadow-lg shadow-red-900/50">
         {loading ? 'Procesando...' : (
           <span className="flex items-center justify-center gap-2">

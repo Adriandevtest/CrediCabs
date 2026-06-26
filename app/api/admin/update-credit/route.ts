@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     // Esquema diario: 28 o 37 pagos de Lunes a Viernes
     const tasa = Number(creditoActual.tasa_interes_porcentaje || 0);
     const interesTotal = monto_total * (tasa / 100);
-    const cuotaDiaria = (monto_total + interesTotal) / num_pagos;
+    const cuotaDiaria = Math.ceil((monto_total + interesTotal) / num_pagos);
 
     // 1. Actualizar el crédito
     const { error: creditoError } = await supabaseAdmin
