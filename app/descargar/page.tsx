@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Descarga la aplicación CrediCabs para gestionar tus créditos desde tu celular.',
 };
 
-const APK_URL = 'https://pnesuibfgtescgudkerf.supabase.co/storage/v1/object/public/expedientes/app/Credicabs v1.2.apk';
+const APK_URL = 'https://pnesuibfgtescgudkerf.supabase.co/storage/v1/object/public/expedientes/app/Credicabs%20v1.2.apk';
 
 const features = [
   { icon: 'fa-bolt',          title: 'Pagos al instante',     desc: 'Registra y confirma pagos en segundos desde cualquier lugar.' },
@@ -70,7 +70,7 @@ export default function DescargarPage() {
               className="inline-flex items-center gap-3 bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-300 text-gray-950 font-black text-lg px-8 py-4 rounded-2xl transition-all shadow-lg shadow-yellow-500/20 hover:shadow-yellow-400/30 hover:-translate-y-0.5">
               <i className="fa-solid fa-download text-xl" />
               Descargar APK
-              <span className="text-xs font-bold opacity-60 ml-1">v1.0 · 15.6 MB</span>
+              <span className="text-xs font-bold opacity-60 ml-1">v1.2 · 18.6 MB</span>
             </a>
             <p className="text-gray-600 text-xs mt-4">
               <i className="fa-brands fa-android mr-1" />
