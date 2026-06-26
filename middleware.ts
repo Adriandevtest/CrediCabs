@@ -29,6 +29,17 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session }, error } = await supabase.auth.getSession();
 
+  const { pathname } = request.nextUrl;
+
+  // Rutas públicas — nunca redirigir, independientemente del estado de sesión
+  const isPublic =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/descargar') ||
+    pathname.startsWith('/panel-cliente') ||
+    pathname.startsWith('/api');
+
+  if (isPublic) return response;
+
   // Refresh token inválido o expirado → limpiar cookies y mandar al login
   if (error) {
     const loginUrl = new URL('/login', request.url);
@@ -39,14 +50,8 @@ export async function middleware(request: NextRequest) {
     return clearResponse;
   }
 
-  // Lógica de protección
-  const { pathname } = request.nextUrl;
-  if (!session &&
-      !pathname.startsWith('/login') &&
-      !pathname.startsWith('/panel-cliente') &&
-      !pathname.startsWith('/descargar') &&
-      !pathname.startsWith('/api')
-  ) {
+  // Rutas protegidas — requieren sesión activa
+  if (!session) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
