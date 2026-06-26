@@ -8,6 +8,16 @@ export async function POST(request: Request) {
     if (!email || !password || !nombre || !rol) {
       return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'El formato del correo no es válido.' }, { status: 400 });
+    }
+    if (password.length < 6) {
+      return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, { status: 400 });
+    }
+    const rolesValidos = ['admin', 'cobrador', 'asesor', 'cliente'];
+    if (!rolesValidos.includes(rol)) {
+      return NextResponse.json({ error: 'Rol no válido.' }, { status: 400 });
+    }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

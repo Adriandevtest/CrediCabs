@@ -6,9 +6,8 @@ export async function middleware(request: NextRequest) {
     request: { headers: request.headers },
   });
 
-  // PASAMOS LOS VALORES DIRECTAMENTE AQUÍ PARA PRUEBA
-  const supabaseUrl = "https://pnesuibfgtescgudkerf.supabase.co";
-  const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuZXN1aWJmZ3Rlc2NndWRrZXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1ODIzMjEsImV4cCI6MjA5NTE1ODMyMX0.V8s-7a9pNSEPZm0rUS9iQB156OeE9h5ASjp02Qyv2cw"; // REEMPLAZA ESTO CON TU CLAVE REAL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {

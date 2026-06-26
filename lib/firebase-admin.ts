@@ -3,7 +3,10 @@ import admin from 'firebase-admin';
 let messaging: admin.messaging.Messaging | null = null;
 
 export function getFirebaseMessaging(): admin.messaging.Messaging | null {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) return null;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    console.warn('[Firebase] FIREBASE_SERVICE_ACCOUNT no configurada — push notifications desactivadas');
+    return null;
+  }
   if (messaging) return messaging;
 
   if (!admin.apps.length) {

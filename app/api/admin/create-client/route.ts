@@ -17,15 +17,17 @@ export async function POST(request: Request) {
     if (!nombre_completo || !monto_total || !semanas_autorizadas || !cobrador_asignado_id) {
       return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
     }
-
     if (semanas_autorizadas !== 28 && semanas_autorizadas !== 37) {
       return NextResponse.json({ error: 'El esquema debe ser 28 o 37 pagos.' }, { status: 400 });
     }
+    if (typeof monto_total !== 'number' || monto_total <= 0) {
+      return NextResponse.json({ error: 'El monto debe ser un número positivo.' }, { status: 400 });
+    }
 
-    const supabaseUrl = 'https://pnesuibfgtescgudkerf.supabase.co';
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBuZXN1aWJmZ3Rlc2NndWRrZXJmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTU4MjMyMSwiZXhwIjoyMDk1MTU4MzIxfQ.tmiI8NHQiGDnZkjRgz_tXwjY3kVjiP7g2JmqMp38BhM';
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     // 1. Crear usuario en Auth sin iniciar sesión
     const emailAutomatico = email || `cliente_${Date.now()}@credicabs.com`;

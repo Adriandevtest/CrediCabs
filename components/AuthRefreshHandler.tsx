@@ -7,16 +7,18 @@ export function AuthRefreshHandler() {
   const router = useRouter();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         router.replace('/login');
       }
-    });
-
-    // Si al montar ya hay un error de refresh token, limpiarlo
-    supabase.auth.getSession().then(({ error }) => {
-      if (error) {
-        supabase.auth.signOut().finally(() => router.replace('/login'));
+      // Sesión inicial nula = token expirado en cookie o sin sesión activa
+      if (event === 'INITIAL_SESSION' && !session) {
+        router.replace('/login');
+      }
+      // Refresh fallido → Supabase emite SIGNED_OUT, pero capturamos el error
+      // de red explícitamente por si el evento no llega
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        router.replace('/login');
       }
     });
 

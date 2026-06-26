@@ -8,9 +8,11 @@ export async function POST(request: Request) {
     if (!credito_id || !monto_total || !num_pagos) {
       return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
     }
-
     if (num_pagos !== 28 && num_pagos !== 37) {
       return NextResponse.json({ error: 'El esquema debe ser 28 o 37 pagos.' }, { status: 400 });
+    }
+    if (typeof monto_total !== 'number' || monto_total <= 0) {
+      return NextResponse.json({ error: 'El monto debe ser un número positivo.' }, { status: 400 });
     }
 
     const supabaseAdmin = createClient(
