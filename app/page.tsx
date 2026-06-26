@@ -51,7 +51,17 @@ export default function Home() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Broadcast del servidor al aprobar transferencias (más confiable que postgres_changes)
+    const chBc = supabase
+      .channel('admin-pagos')
+      .on('broadcast', { event: 'pago_aprobado' }, () => {
+        setCapitalFlash(true);
+        setTimeout(() => setCapitalFlash(false), 1500);
+        cargarDatosDashboard();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); supabase.removeChannel(chBc); };
   }, []);
 
   const verificarAccesoYDatos = async () => {

@@ -98,21 +98,24 @@ export async function POST(request: Request) {
 
       const montoFmt = `$${Number(trans?.monto).toLocaleString('es-MX')}`;
 
-      // Broadcast en tiempo real (no depende de RLS ni de publicación de tablas)
+      // Broadcast en tiempo real — AWAIT obligatorio: en Vercel la función se cierra
+      // al devolver la respuesta y un fetch sin await nunca se completa.
       const broadcastHeaders = {
         'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
         'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
       };
-      const broadcastMessages: { topic: string; event: string; payload: object }[] = [];
+      const broadcastMessages: { topic: string; event: string; payload: object }[] = [
+        { topic: 'admin-pagos', event: 'pago_aprobado', payload: { cliente_id: trans?.cliente_id } },
+      ];
       if (trans?.cliente_id) broadcastMessages.push({ topic: `pagos-cliente-${trans.cliente_id}`, event: 'pago_aprobado', payload: {} });
       if (cobradorId)        broadcastMessages.push({ topic: `pagos-cobrador-${cobradorId}`, event: 'pago_aprobado', payload: {} });
-      if (broadcastMessages.length) {
-        fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
           method: 'POST', headers: broadcastHeaders,
           body: JSON.stringify({ messages: broadcastMessages }),
-        }).catch(() => {});
-      }
+        });
+      } catch { /* no bloquear la respuesta si falla el broadcast */ }
 
       // Notificar al CLIENTE
       if (trans?.cliente_id) {
