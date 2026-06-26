@@ -98,6 +98,22 @@ export async function POST(request: Request) {
 
       const montoFmt = `$${Number(trans?.monto).toLocaleString('es-MX')}`;
 
+      // Broadcast en tiempo real (no depende de RLS ni de publicación de tablas)
+      const broadcastHeaders = {
+        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      };
+      const broadcastMessages: { topic: string; event: string; payload: object }[] = [];
+      if (trans?.cliente_id) broadcastMessages.push({ topic: `pagos-cliente-${trans.cliente_id}`, event: 'pago_aprobado', payload: {} });
+      if (cobradorId)        broadcastMessages.push({ topic: `pagos-cobrador-${cobradorId}`, event: 'pago_aprobado', payload: {} });
+      if (broadcastMessages.length) {
+        fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
+          method: 'POST', headers: broadcastHeaders,
+          body: JSON.stringify({ messages: broadcastMessages }),
+        }).catch(() => {});
+      }
+
       // Notificar al CLIENTE
       if (trans?.cliente_id) {
         const msgCliente = `Tu pago de ${montoFmt} fue verificado y aprobado. Ya está registrado en tu cuenta.`;

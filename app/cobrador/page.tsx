@@ -93,7 +93,18 @@ export default function CobradorPage() {
       })
       .subscribe((status) => setRtActivo(status === 'SUBSCRIBED'));
 
-    return () => { supabase.removeChannel(channel); };
+    // Broadcast: recibe señal del API cuando admin aprueba una transferencia
+    const chBc = supabase
+      .channel(`pagos-cobrador-${userId}`)
+      .on('broadcast', { event: 'pago_aprobado' }, () => {
+        cargarRutaDelDia();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(chBc);
+    };
   }, [userId]);
 
   // Cargar historial al entrar al tab por primera vez

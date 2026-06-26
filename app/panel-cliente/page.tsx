@@ -131,7 +131,8 @@ export default function PanelCliente() {
     setClienteId(id);
     cargarDatos(id);
 
-    const channel = supabase
+    // postgres_changes: funciona si la tabla tiene Realtime habilitado en Supabase
+    const chPg = supabase
       .channel(`cliente-pagos-rt-${id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
         setPagoReciente(true);
@@ -140,7 +141,20 @@ export default function PanelCliente() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Broadcast: el API envía esto al aprobar → no depende de RLS ni publicación
+    const chBc = supabase
+      .channel(`pagos-cliente-${id}`)
+      .on('broadcast', { event: 'pago_aprobado' }, () => {
+        setPagoReciente(true);
+        setTimeout(() => setPagoReciente(false), 4000);
+        cargarDatos(id);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chPg);
+      supabase.removeChannel(chBc);
+    };
   }, [router, cargarDatos]);
 
   // Set calendar to the month of first pending payment once data loads
