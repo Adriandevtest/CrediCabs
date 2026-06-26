@@ -7,10 +7,11 @@ import TableWithDialog from '../../components/TableWithDialog';
 import UserNav from '../../components/UserNav';
 import RegisterClientForm from '../../components/RegisterClientForm';
 import ClientesEnMora from '../../components/ClientesEnMora';
+import CreditosActivos from '../../components/CreditosActivos';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 
-type Vista = 'todos' | 'mora';
+type Vista = 'todos' | 'mora' | 'creditos';
 
 export default function ClientesPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,11 +59,18 @@ export default function ClientesPage() {
           Todos
         </button>
         <button
+          onClick={() => setVista('creditos')}
+          className={`flex-1 py-2 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 ${vista === 'creditos' ? 'bg-yellow-500 text-gray-950' : 'bg-gray-800 text-gray-400'}`}
+        >
+          <i className="fa-solid fa-coins text-[10px]" />
+          Cartera
+        </button>
+        <button
           onClick={() => setVista('mora')}
           className={`flex-1 py-2 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 ${vista === 'mora' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400'}`}
         >
           <i className="fa-solid fa-triangle-exclamation text-[10px]" />
-          En Mora
+          Mora
         </button>
       </div>
 
@@ -94,6 +102,13 @@ export default function ClientesPage() {
                 className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors ${vista === 'todos' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
               >
                 Todos los clientes
+              </button>
+              <button
+                onClick={() => setVista('creditos')}
+                className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors flex items-center gap-1.5 ${vista === 'creditos' ? 'bg-yellow-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              >
+                <i className="fa-solid fa-coins text-[10px]" />
+                Cartera activa
               </button>
               <button
                 onClick={() => setVista('mora')}
@@ -158,10 +173,9 @@ export default function ClientesPage() {
         </div>
 
         {/* Contenido según tab */}
-        {vista === 'todos'
-          ? <TableWithDialog key={refreshKey} searchQuery={searchQuery} />
-          : <ClientesEnMora searchQuery={searchQuery} />
-        }
+        {vista === 'todos'    && <TableWithDialog key={refreshKey} searchQuery={searchQuery} />}
+        {vista === 'creditos' && <CreditosActivos searchQuery={searchQuery} />}
+        {vista === 'mora'     && <ClientesEnMora searchQuery={searchQuery} />}
 
       </div>
     </main>
