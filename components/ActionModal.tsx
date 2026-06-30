@@ -21,30 +21,30 @@ export default function ActionModal({ isOpen, onClose, cobradores }: ActionModal
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl">
-        
-        {/* Cabecera de la Modal */}
-        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4 bg-black/80 backdrop-blur-sm">
+      <div className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col max-h-[92vh] md:max-h-[88vh]">
+
+        {/* Cabecera fija */}
+        <div className="shrink-0 p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-2xl">
           <h2 className="text-xl font-bold text-white uppercase tracking-widest">
             {step === 'select' ? 'Nuevo Registro' : step === 'cliente' ? 'Alta de Cliente' : 'Alta de Cobrador'}
           </h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+          <button onClick={handleClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
 
-        <div className="p-6">
+        {/* Contenido desplazable */}
+        <div className="overflow-y-auto flex-1">
           {step === 'select' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button 
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
                 onClick={() => setStep('cliente')}
                 className="group p-8 border border-gray-800 rounded-xl hover:border-red-600 transition-all bg-gray-900 text-center"
               >
                 <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">👤</div>
                 <h3 className="text-white font-bold text-lg mb-1">Nuevo Cliente</h3>
-                <p className="text-gray-400 text-sm">Registrar préstamo y generar pagos diarios.</p>
+                <p className="text-gray-400 text-sm">Registrar préstamo y generar pagos.</p>
               </button>
-
-              <button 
+              <button
                 onClick={() => setStep('cobrador')}
                 className="group p-8 border border-gray-800 rounded-xl hover:border-yellow-500 transition-all bg-gray-900 text-center"
               >
@@ -56,14 +56,16 @@ export default function ActionModal({ isOpen, onClose, cobradores }: ActionModal
           )}
 
           {step === 'cliente' && (
-            <div className="max-h-[70vh] overflow-y-auto pr-2">
+            <div>
               <RegisterClientForm cobradores={cobradores} />
-              <button onClick={() => setStep('select')} className="mt-4 text-gray-500 text-sm hover:underline">← Volver atrás</button>
+              <div className="px-6 pb-6">
+                <button onClick={() => setStep('select')} className="text-gray-500 text-sm hover:underline">← Volver atrás</button>
+              </div>
             </div>
           )}
 
           {step === 'cobrador' && (
-            <div>
+            <div className="p-6">
               <RegisterCobradorForm onCobradorAdded={handleClose} />
               <button onClick={() => setStep('select')} className="mt-4 text-gray-500 text-sm hover:underline">← Volver atrás</button>
             </div>

@@ -87,7 +87,7 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
     `Pago quincenal (${numPagos} quincenas)`;
 
   return (
-    <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="p-6 md:p-8 bg-gray-900 rounded-xl shadow-2xl border border-red-900 flex flex-col gap-4 w-full">
+    <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="p-4 md:p-6 bg-gray-950 flex flex-col gap-4 w-full">
       <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 border-l-4 border-yellow-500 pl-3">
         Nuevo Cliente
       </h2>
