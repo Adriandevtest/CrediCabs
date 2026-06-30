@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     if (password.length < 6) {
       return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, { status: 400 });
     }
-    const rolesValidos = ['admin', 'cobrador', 'asesor', 'cliente'];
+    const rolesValidos = ['admin', 'cobrador', 'supervisor', 'cliente'];
     if (!rolesValidos.includes(rol)) {
       return NextResponse.json({ error: 'Rol no válido.' }, { status: 400 });
     }

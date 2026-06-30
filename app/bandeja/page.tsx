@@ -143,7 +143,7 @@ export default function BandejaPage() {
       }
       await supabase.from('solicitudes').update({ estado: 'aprobado' }).eq('id', selectedSolicitud.id);
 
-      // Notify asesor
+      // Notify supervisor
       if (selectedSolicitud.asesor_id) {
         supabase.from('notificaciones').insert({
           destinatario_id: selectedSolicitud.asesor_id,
@@ -168,7 +168,7 @@ export default function BandejaPage() {
     try {
       await supabase.from('solicitudes').update({ estado: 'rechazado' }).eq('id', id);
 
-      // Notify asesor
+      // Notify supervisor
       if (selectedSolicitud?.asesor_id) {
         supabase.from('notificaciones').insert({
           destinatario_id: selectedSolicitud.asesor_id,

@@ -28,6 +28,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [capitalFlash, setCapitalFlash] = useState(false);
   const [pinPreviewOpen, setPinPreviewOpen] = useState(false);
+  const [showRetiro, setShowRetiro] = useState(false);
+  const [montoRetiro, setMontoRetiro] = useState('');
+  const [showIngreso, setShowIngreso] = useState(false);
+  const [montoIngreso, setMontoIngreso] = useState('');
   const router = useRouter();
 
   const hoy = new Date();
@@ -65,13 +69,6 @@ export default function Home() {
   }, []);
 
   const verificarAccesoYDatos = async () => {
-    // Clientes usan localStorage, no Supabase Auth — chequear ANTES de cualquier
-    // llamada async para que un error de red no los mande al login
-    if (typeof window !== 'undefined' && localStorage.getItem('cliente_id')) {
-      router.push('/panel-cliente');
-      return;
-    }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/login'); return; }
@@ -84,7 +81,8 @@ export default function Home() {
 
       if (error || profile?.rol !== 'admin') {
         if (profile?.rol === 'cobrador') router.push('/cobrador');
-        else if (profile?.rol === 'asesor') router.push('/asesor');
+        else if (profile?.rol === 'supervisor') router.push('/supervisor');
+        else if (profile?.rol === 'cliente') router.push('/panel-cliente');
         else router.push('/login');
         return;
       }
@@ -131,16 +129,25 @@ export default function Home() {
         setMetaHoy(Math.round(meta));
         setTotalPagosEsperados((pagosEsperadosHoy || []).length);
 
-        // Capital actual = suma de todos los pagos cobrados (cuota + mora)
-        // Sube en tiempo real con cada cobro registrado
-        const { data: pagosRealizados } = await supabase
-          .from('pagos_diarios')
-          .select('mora, creditos!inner(monto_diario)')
-          .eq('pagado', true);
+        // Capital actual = total cobrado (cuotas + mora) − capital prestado en créditos activos
+        const [{ data: pagosRealizados }, { data: creditosActivos }] = await Promise.all([
+          supabase
+            .from('pagos_diarios')
+            .select('mora, creditos!inner(monto_diario)')
+            .eq('pagado', true),
+          supabase
+            .from('creditos')
+            .select('monto_total')
+            .or('estado.eq.activo,estado.is.null,estado.eq.atrasado'),
+        ]);
 
-        const capitalActual = (pagosRealizados as any[] || []).reduce(
+        const totalCobrado = (pagosRealizados as any[] || []).reduce(
           (s, p) => s + Number(p.creditos?.monto_diario || 0) + Number(p.mora || 0), 0
         );
+        const totalPrestado = (creditosActivos as any[] || []).reduce(
+          (s, c) => s + Number(c.monto_total || 0), 0
+        );
+        const capitalActual = totalCobrado - totalPrestado;
 
         setMetricas({
           capital: totalCapital,
@@ -202,6 +209,155 @@ export default function Home() {
     } catch (error) {
       console.error('Error cargando dashboard:', error);
     }
+  };
+
+  const generarPDFIngreso = () => {
+    const monto = parseFloat(montoIngreso.replace(/[^0-9.]/g, ''));
+    if (!monto || monto <= 0) return;
+
+    const fecha = new Date().toLocaleDateString('es-MX', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    const folio = `ING-${Date.now().toString().slice(-6)}`;
+
+    const win = window.open('', '_blank', 'width=420,height=600');
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Comprobante de Ingreso ${folio}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#111; padding:32px 28px; max-width:400px; margin:0 auto; }
+  .header { text-align:center; border-bottom:2px solid #111; padding-bottom:16px; margin-bottom:20px; }
+  .brand { font-size:26px; font-weight:900; letter-spacing:-0.5px; }
+  .brand span { color:#cc0000; }
+  .subtitle { font-size:10px; letter-spacing:4px; text-transform:uppercase; color:#555; margin-top:2px; }
+  .badge { display:inline-block; margin-top:10px; background:#111; color:#fff; font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; letter-spacing:1px; }
+  .folio { text-align:center; color:#888; font-size:10px; margin-bottom:20px; letter-spacing:2px; }
+  .row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; font-size:13px; }
+  .row .label { color:#555; }
+  .row .value { font-weight:700; }
+  .divider { border:none; border-top:1px dashed #ccc; margin:18px 0; }
+  .monto-box { background:#f0f9ff; border:2px solid #3b82f6; border-radius:12px; padding:18px 20px; text-align:center; margin:20px 0; }
+  .monto-label { font-size:10px; text-transform:uppercase; letter-spacing:2px; color:#2563eb; font-weight:700; }
+  .monto-valor { font-size:36px; font-weight:900; color:#111; margin-top:4px; }
+  .saldo { background:#f9f9f9; border:1px solid #e5e5e5; border-radius:10px; padding:14px 18px; margin-top:16px; }
+  .saldo-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; }
+  .saldo-row:last-child { margin-bottom:0; font-weight:700; font-size:13px; border-top:1px solid #ddd; padding-top:8px; margin-top:4px; }
+  .footer { text-align:center; margin-top:28px; font-size:9px; color:#aaa; line-height:1.6; }
+  @media print { body { padding:20px; } button { display:none !important; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="brand">Credi <span>Cab's</span></div>
+  <div class="subtitle">Servicios Financieros</div>
+  <div class="badge">Comprobante de Ingreso</div>
+</div>
+<div class="folio">Folio: ${folio}</div>
+<div class="row"><span class="label">Fecha</span><span class="value">${fecha}</span></div>
+<div class="row"><span class="label">Hora</span><span class="value">${hora}</span></div>
+<hr class="divider"/>
+<div class="monto-box">
+  <div class="monto-label">Monto ingresado</div>
+  <div class="monto-valor">$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+</div>
+<div class="saldo">
+  <div class="saldo-row"><span>Capital antes del ingreso</span><span>$${metricas.capitalActual.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+  <div class="saldo-row"><span>Ingreso</span><span style="color:#2563eb">+$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+  <div class="saldo-row"><span>Saldo resultante</span><span>$${(metricas.capitalActual + monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+</div>
+<div class="footer">
+  Este documento es un comprobante interno de Credi Cab's.<br/>
+  Conserve este recibo para su registro contable.<br/><br/>
+  © ${new Date().getFullYear()} Credi Cab's · Todos los derechos reservados
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`);
+    win.document.close();
+    setShowIngreso(false);
+    setMontoIngreso('');
+  };
+
+  const generarPDFRetiro = () => {
+    const monto = parseFloat(montoRetiro.replace(/[^0-9.]/g, ''));
+    if (!monto || monto <= 0) return;
+
+    const fecha = new Date().toLocaleDateString('es-MX', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+    const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    const folio = `RET-${Date.now().toString().slice(-6)}`;
+
+    const win = window.open('', '_blank', 'width=420,height=600');
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Comprobante de Retiro ${folio}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#111; padding:32px 28px; max-width:400px; margin:0 auto; }
+  .header { text-align:center; border-bottom:2px solid #111; padding-bottom:16px; margin-bottom:20px; }
+  .brand { font-size:26px; font-weight:900; letter-spacing:-0.5px; }
+  .brand span { color:#cc0000; }
+  .subtitle { font-size:10px; letter-spacing:4px; text-transform:uppercase; color:#555; margin-top:2px; }
+  .badge { display:inline-block; margin-top:10px; background:#111; color:#fff; font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; letter-spacing:1px; }
+  .folio { text-align:center; color:#888; font-size:10px; margin-bottom:20px; letter-spacing:2px; }
+  .row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; font-size:13px; }
+  .row .label { color:#555; }
+  .row .value { font-weight:700; }
+  .divider { border:none; border-top:1px dashed #ccc; margin:18px 0; }
+  .monto-box { background:#f0faf4; border:2px solid #22c55e; border-radius:12px; padding:18px 20px; text-align:center; margin:20px 0; }
+  .monto-label { font-size:10px; text-transform:uppercase; letter-spacing:2px; color:#16a34a; font-weight:700; }
+  .monto-valor { font-size:36px; font-weight:900; color:#111; margin-top:4px; }
+  .saldo { background:#f9f9f9; border:1px solid #e5e5e5; border-radius:10px; padding:14px 18px; margin-top:16px; }
+  .saldo-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; }
+  .saldo-row:last-child { margin-bottom:0; font-weight:700; font-size:13px; border-top:1px solid #ddd; padding-top:8px; margin-top:4px; }
+  .footer { text-align:center; margin-top:28px; font-size:9px; color:#aaa; line-height:1.6; }
+  @media print {
+    body { padding:20px; }
+    button { display:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="brand">Credi <span>Cab's</span></div>
+  <div class="subtitle">Servicios Financieros</div>
+  <div class="badge">Comprobante de Retiro</div>
+</div>
+<div class="folio">Folio: ${folio}</div>
+<div class="row"><span class="label">Fecha</span><span class="value">${fecha}</span></div>
+<div class="row"><span class="label">Hora</span><span class="value">${hora}</span></div>
+<hr class="divider"/>
+<div class="monto-box">
+  <div class="monto-label">Monto retirado</div>
+  <div class="monto-valor">$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+</div>
+<div class="saldo">
+  <div class="saldo-row"><span>Capital antes del retiro</span><span>$${metricas.capitalActual.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+  <div class="saldo-row"><span>Retiro</span><span style="color:#cc0000">-$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+  <div class="saldo-row"><span>Saldo restante</span><span>$${Math.max(0, metricas.capitalActual - monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+</div>
+<div class="footer">
+  Este documento es un comprobante interno de Credi Cab's.<br/>
+  Conserve este recibo para su registro contable.<br/><br/>
+  © ${new Date().getFullYear()} Credi Cab's · Todos los derechos reservados
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`);
+    win.document.close();
+    setShowRetiro(false);
+    setMontoRetiro('');
   };
 
   if (loading) {
@@ -317,6 +473,22 @@ export default function Home() {
               ${metricas.capitalActual.toLocaleString('es-MX')}
             </p>
             <p className="text-gray-600 text-[10px] mt-1">total cobrado · cuotas + mora</p>
+            <div className="mt-2 flex gap-1.5">
+              <button
+                onClick={() => { setShowIngreso(true); setMontoIngreso(''); }}
+                className="flex items-center gap-1 text-[10px] font-bold text-blue-400 border border-blue-800/60 bg-blue-950/30 hover:bg-blue-900/40 active:bg-blue-900/60 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-arrow-down-to-bracket text-[9px]" />
+                Ingreso
+              </button>
+              <button
+                onClick={() => { setShowRetiro(true); setMontoRetiro(''); }}
+                className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 border border-emerald-800/60 bg-emerald-950/30 hover:bg-emerald-900/40 active:bg-emerald-900/60 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                <i className="fa-solid fa-arrow-up-from-bracket text-[9px]" />
+                Retiro
+              </button>
+            </div>
           </div>
         </div>
 
@@ -519,6 +691,116 @@ export default function Home() {
           cobradores={cobradores}
         />
       </div>
+
+      {/* ── MODAL INGRESO ── */}
+      {showIngreso && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-t-3xl md:rounded-3xl p-6 space-y-5">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-center justify-center">
+                  <i className="fa-solid fa-arrow-down-to-bracket text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-white font-black text-base leading-tight">Ingreso de capital</p>
+                  <p className="text-gray-500 text-[10px]">Capital actual: <span className="text-blue-400 font-bold">${metricas.capitalActual.toLocaleString('es-MX')}</span></p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowIngreso(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 hover:text-white transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <div>
+              <label className="text-gray-400 text-xs font-medium block mb-2">Monto a ingresar</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 font-black text-lg">$</span>
+                <input
+                  type="number"
+                  value={montoIngreso}
+                  onChange={e => setMontoIngreso(e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  className="w-full pl-9 pr-4 py-4 rounded-2xl text-white text-xl font-black placeholder:text-gray-700 bg-gray-800 border border-gray-700 focus:border-blue-500/50 focus:outline-none transition-colors"
+                  onKeyDown={e => e.key === 'Enter' && generarPDFIngreso()}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={generarPDFIngreso}
+              disabled={!montoIngreso || parseFloat(montoIngreso) <= 0}
+              className="w-full py-4 rounded-2xl font-bold text-white text-sm tracking-wide bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-file-pdf" />
+              Generar comprobante PDF
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL RETIRO ── */}
+      {showRetiro && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-t-3xl md:rounded-3xl p-6 space-y-5">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-center">
+                  <i className="fa-solid fa-arrow-up-from-bracket text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-white font-black text-base leading-tight">Retiro de capital</p>
+                  <p className="text-gray-500 text-[10px]">Capital disponible: <span className="text-emerald-400 font-bold">${metricas.capitalActual.toLocaleString('es-MX')}</span></p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRetiro(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 hover:text-white transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <div>
+              <label className="text-gray-400 text-xs font-medium block mb-2">Monto a retirar</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 font-black text-lg">$</span>
+                <input
+                  type="number"
+                  value={montoRetiro}
+                  onChange={e => setMontoRetiro(e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  className="w-full pl-9 pr-4 py-4 rounded-2xl text-white text-xl font-black placeholder:text-gray-700 bg-gray-800 border border-gray-700 focus:border-emerald-500/50 focus:outline-none transition-colors"
+                  onKeyDown={e => e.key === 'Enter' && generarPDFRetiro()}
+                  autoFocus
+                />
+              </div>
+              {montoRetiro && parseFloat(montoRetiro) > metricas.capitalActual && (
+                <p className="text-red-400 text-xs mt-1.5 flex items-center gap-1">
+                  <i className="fa-solid fa-triangle-exclamation text-[9px]" />
+                  El monto supera el capital disponible
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={generarPDFRetiro}
+              disabled={!montoRetiro || parseFloat(montoRetiro) <= 0}
+              className="w-full py-4 rounded-2xl font-bold text-white text-sm tracking-wide bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-file-pdf" />
+              Generar comprobante PDF
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal preview PIN — solo para probar la apariencia y el teclado */}
       <AdminPinModal

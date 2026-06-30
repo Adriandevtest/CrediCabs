@@ -145,7 +145,7 @@ export const AnimatedStaffForm: React.FC<AnimatedStaffFormProps> = ({ onSuccess,
               <Label>Rol *</Label>
               <select className="flex h-10 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white" value={rol} onChange={(e) => setRol(e.target.value)}>
                 <option value="cobrador">🏍️ Cobrador de Ruta</option>
-                <option value="asesor">💼 Asesor de Campo</option>
+                <option value="supervisor">💼 Supervisor de Campo</option>
               </select>
             </div>
           </div>

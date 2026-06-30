@@ -53,17 +53,17 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    // Datos del cliente y asesor del crédito
+    // Datos del cliente y supervisor del crédito
     const { data: prof } = await supabaseAdmin.from('profiles').select('nombre_completo').eq('id', clienteId).single();
     const nombre = prof?.nombre_completo || 'Un cliente';
     const msgNuevo = `${nombre} envió un comprobante de $${Number(monto).toLocaleString('es-MX')}`;
 
-    // Buscar asesor que creó el crédito y cobrador asignado al cliente
+    // Buscar supervisor que creó el crédito y cobrador asignado al cliente
     const [{ data: credito }, { data: clienteRow }] = await Promise.all([
       supabaseAdmin.from('creditos').select('creado_por').eq('id', creditoId).single(),
       supabaseAdmin.from('clientes').select('cobrador_asignado_id').eq('id', clienteId).single(),
     ]);
-    const asesorId: string | null = credito?.creado_por ?? null;
+    const supervisorId: string | null = credito?.creado_por ?? null;
     const cobradorId: string | null = clienteRow?.cobrador_asignado_id ?? null;
 
     // Notificación in-app al admin
@@ -75,10 +75,10 @@ export async function POST(request: Request) {
       referencia_id: data.id,
     }).then(() => {});
 
-    // Notificación in-app al asesor
-    if (asesorId) {
+    // Notificación in-app al supervisor
+    if (supervisorId) {
       await supabaseAdmin.from('notificaciones').insert({
-        destinatario_id: asesorId,
+        destinatario_id: supervisorId,
         titulo: 'Nuevo comprobante de pago',
         mensaje: msgNuevo,
         tipo: 'transferencia',
@@ -86,9 +86,9 @@ export async function POST(request: Request) {
       }).then(() => {});
     }
 
-    // Push nativa: admins + asesor + cobrador
+    // Push nativa: admins + supervisor + cobrador
     sendPushToAdmins('💳 Nuevo comprobante', msgNuevo).catch(() => {});
-    const staffIds = [asesorId, cobradorId].filter(Boolean) as string[];
+    const staffIds = [supervisorId, cobradorId].filter(Boolean) as string[];
     if (staffIds.length) sendPushToUserIds(staffIds, '💳 Nuevo comprobante', msgNuevo).catch(() => {});
 
     return NextResponse.json({ success: true, transferencia: data });

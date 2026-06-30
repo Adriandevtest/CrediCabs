@@ -39,7 +39,7 @@ export default function EquipoPage() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .in('rol', ['asesor', 'cobrador'])
+        .in('rol', ['supervisor', 'cobrador'])
         .order('nombre_completo', { ascending: true });
 
       if (error) throw error;
@@ -153,7 +153,7 @@ export default function EquipoPage() {
                 <i className="fa-solid fa-user-plus"></i>
               </div>
               <h3 className="text-white font-bold text-xl mb-2">Nuevo Integrante</h3>
-              <p className="text-sm text-gray-400 mb-6">Añade cobradores o asesores al sistema.</p>
+              <p className="text-sm text-gray-400 mb-6">Añade cobradores o supervisores al sistema.</p>
               
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogTrigger asChild>
@@ -188,7 +188,7 @@ export default function EquipoPage() {
                 {equipo.map((miembro) => (
                   <div key={miembro.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-yellow-500 transition-colors flex flex-col gap-3 shadow-lg">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 shrink-0 ${miembro.rol === 'asesor' ? 'border-red-700' : 'border-yellow-700'}`}>
+                      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 shrink-0 ${miembro.rol === 'supervisor' ? 'border-red-700' : 'border-yellow-700'}`}>
                         {(miembro.avatar_url || miembro.foto_url) ? (
                           <img
                             src={miembro.avatar_url || miembro.foto_url}
@@ -196,7 +196,7 @@ export default function EquipoPage() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className={`w-full h-full flex items-center justify-center text-sm font-black ${miembro.rol === 'asesor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                          <div className={`w-full h-full flex items-center justify-center text-sm font-black ${miembro.rol === 'supervisor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
                             {getIniciales(miembro.nombre_completo)}
                           </div>
                         )}
@@ -231,7 +231,7 @@ export default function EquipoPage() {
             <div className="space-y-4">
               {/* Avatar + nombre */}
               <div className="flex items-center gap-4">
-                <div className={`w-16 h-16 rounded-full overflow-hidden border-2 shrink-0 ${selectedMember.rol === 'asesor' ? 'border-red-700' : 'border-yellow-700'}`}>
+                <div className={`w-16 h-16 rounded-full overflow-hidden border-2 shrink-0 ${selectedMember.rol === 'supervisor' ? 'border-red-700' : 'border-yellow-700'}`}>
                   {(selectedMember.avatar_url || selectedMember.foto_url) ? (
                     <img
                       src={selectedMember.avatar_url || selectedMember.foto_url}
@@ -239,14 +239,14 @@ export default function EquipoPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className={`w-full h-full flex items-center justify-center text-lg font-black ${selectedMember.rol === 'asesor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                    <div className={`w-full h-full flex items-center justify-center text-lg font-black ${selectedMember.rol === 'supervisor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
                       {getIniciales(selectedMember.nombre_completo)}
                     </div>
                   )}
                 </div>
                 <div>
                   <p className="text-white font-bold text-base leading-tight">{selectedMember.nombre_completo}</p>
-                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${selectedMember.rol === 'asesor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${selectedMember.rol === 'supervisor' ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
                     {selectedMember.rol}
                   </span>
                 </div>

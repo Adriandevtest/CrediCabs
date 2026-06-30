@@ -69,7 +69,7 @@ export default function MobileNav() {
   if (OCULTAR_EN.includes(pathname) || keyboardOpen) return null;
 
   // ── NAV ASESOR ────────────────────────────────────────────
-  if (pathname === '/asesor') {
+  if (pathname === '/supervisor') {
     return (
       <nav className={`fixed left-4 right-4 md:hidden z-[45] h-16 bg-white rounded-3xl flex items-center justify-around px-2 shadow-2xl border border-gray-100 transition-transform duration-300 ${hidden ? 'translate-y-28' : 'translate-y-0'}`}
         style={{ bottom: 'max(1rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)))' }}>
@@ -78,7 +78,7 @@ export default function MobileNav() {
           return (
             <a
               key={label}
-              href={`/asesor${hash}`}
+              href={`/supervisor${hash}`}
               className={`flex flex-col items-center justify-center gap-0.5 py-1 px-4 relative transition-colors ${isActive ? 'text-yellow-500' : 'text-gray-400'}`}
             >
               {isActive && (

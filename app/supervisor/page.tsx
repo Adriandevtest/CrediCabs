@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
-import AsesorForm from '../../components/AsesorForm';
+import SupervisorForm from '../../components/SupervisorForm';
 import UserNav from '../../components/UserNav';
 import GeoTracker from '../../components/GeoTracker';
 import { LumaSpin } from '../../components/luma-spin';
@@ -16,12 +16,12 @@ const ESTADO_BADGE: Record<string, { label: string; classes: string }> = {
   rechazado:  { label: 'Rechazado',  classes: 'bg-red-900/40 text-red-400 border border-red-800/40' },
 };
 
-export default function AsesorPage() {
+export default function SupervisorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('nueva');
   const [userId, setUserId] = useState<string | null>(null);
-  const [nombreAsesor, setNombreAsesor] = useState('');
-  const [telefonoAsesor, setTelefonoAsesor] = useState('');
-  const [fotoAsesor, setFotoAsesor] = useState('');
+  const [nombreSupervisor, setNombreSupervisor] = useState('');
+  const [telefonoSupervisor, setTelefonoSupervisor] = useState('');
+  const [fotoSupervisor, setFotoSupervisor] = useState('');
   const [gpsEstado, setGpsEstado] = useState<GpsEstado>('inactivo');
 
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
@@ -55,9 +55,9 @@ export default function AsesorPage() {
         .single();
 
       if (perfil) {
-        setNombreAsesor(perfil.nombre_completo || '');
-        setTelefonoAsesor(perfil.telefono || '');
-        setFotoAsesor(perfil.foto_url || perfil.avatar_url || '');
+        setNombreSupervisor(perfil.nombre_completo || '');
+        setTelefonoSupervisor(perfil.telefono || '');
+        setFotoSupervisor(perfil.foto_url || perfil.avatar_url || '');
       }
     });
   }, []);
@@ -108,7 +108,7 @@ export default function AsesorPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-white font-black text-lg leading-tight">
-              Credi <span className="text-yellow-500">Asesor</span>
+              Credi <span className="text-yellow-500">Supervisor</span>
             </h1>
             <span
               className={`w-2 h-2 rounded-full shrink-0 ${gpsEstado === 'activo' ? 'bg-blue-500 animate-pulse' : gpsEstado === 'error' ? 'bg-red-400' : 'bg-gray-600'}`}
@@ -125,7 +125,7 @@ export default function AsesorPage() {
 
         {/* ════ TAB: NUEVA ════ */}
         {activeTab === 'nueva' && (
-          <AsesorForm userId={userId} />
+          <SupervisorForm userId={userId} />
         )}
 
         {/* ════ TAB: SOLICITUDES ════ */}
@@ -209,25 +209,25 @@ export default function AsesorPage() {
             {/* Datos */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-4">
               <div className="flex items-center gap-4 mb-4">
-                {fotoAsesor ? (
+                {fotoSupervisor ? (
                   <img
-                    src={fotoAsesor}
-                    alt={nombreAsesor}
+                    src={fotoSupervisor}
+                    alt={nombreSupervisor}
                     className="w-14 h-14 rounded-full object-cover border-2 border-yellow-500 shrink-0"
                   />
                 ) : (
                   <div className="w-14 h-14 bg-yellow-500 rounded-full flex items-center justify-center text-gray-950 font-black text-xl shrink-0">
-                    {(nombreAsesor || 'A')[0].toUpperCase()}
+                    {(nombreSupervisor || 'S')[0].toUpperCase()}
                   </div>
                 )}
                 <div>
-                  <p className="text-white font-bold text-base leading-tight">{nombreAsesor || 'Asesor'}</p>
-                  <span className="text-xs text-gray-950 bg-yellow-500 px-2 py-0.5 rounded-full font-bold">Asesor</span>
+                  <p className="text-white font-bold text-base leading-tight">{nombreSupervisor || 'Supervisor'}</p>
+                  <span className="text-xs text-gray-950 bg-yellow-500 px-2 py-0.5 rounded-full font-bold">Supervisor</span>
                 </div>
               </div>
 
-              {telefonoAsesor && (
-                <a href={`tel:${telefonoAsesor}`} className="flex items-center gap-3 py-2.5 border-t border-gray-800">
+              {telefonoSupervisor && (
+                <a href={`tel:${telefonoSupervisor}`} className="flex items-center gap-3 py-2.5 border-t border-gray-800">
                   <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center shrink-0">
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -236,7 +236,7 @@ export default function AsesorPage() {
                   </div>
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider">Teléfono</p>
-                    <p className="text-gray-300 text-sm">{telefonoAsesor}</p>
+                    <p className="text-gray-300 text-sm">{telefonoSupervisor}</p>
                   </div>
                 </a>
               )}

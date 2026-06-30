@@ -125,7 +125,7 @@ export default function UserNav() {
       {profile.rol === 'admin' && (
         <NotifBell filterRol="admin" storageKey="notif_seen_admin" />
       )}
-      {profile.rol === 'asesor' && (
+      {profile.rol === 'supervisor' && (
         <NotifBell filterId={profile.id} storageKey={`notif_seen_${profile.id}`} />
       )}
     <Dialog>

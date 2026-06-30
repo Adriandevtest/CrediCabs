@@ -444,7 +444,7 @@ export function CinematicHero({ metricValue = 1247, className, ...props }: Cinem
                 Cobranza sin papel.
               </h3>
               <p className="hidden md:block text-yellow-100/50 text-sm md:text-base lg:text-lg font-normal leading-relaxed max-w-sm">
-                <span className="text-white font-semibold">CrediCabs</span> conecta a cobradores, asesores y administradores en una sola plataforma. Pagos, comprobantes y notificaciones en tiempo real, desde cualquier celular Android.
+                <span className="text-white font-semibold">CrediCabs</span> conecta a cobradores, supervisores y administradores en una sola plataforma. Pagos, comprobantes y notificaciones en tiempo real, desde cualquier celular Android.
               </p>
             </div>
 

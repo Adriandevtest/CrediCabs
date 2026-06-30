@@ -30,8 +30,8 @@ export default function LoginPage() {
   }, []);
 
   const handleSignIn = async () => {
-    if (!email) {
-      setErrorMsg('Por favor ingresa tu ID o Correo.');
+    if (!email || !password) {
+      setErrorMsg('Por favor ingresa tu ID (o correo) y contraseña.');
       return;
     }
 
@@ -39,37 +39,26 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      if (password) {
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      // Sin @ → número de cliente (CLI-XXXX); construir email automáticamente
+      const emailAuth = email.includes('@') ? email : `${email}@credicabs.com`;
 
-        if (!authError) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('rol')
-            .eq('id', authData.user.id)
-            .single();
-          if (profile?.rol === 'cobrador') return router.push('/cobrador');
-          if (profile?.rol === 'asesor') return router.push('/asesor');
-          return router.push('/');
-        }
-      }
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: emailAuth,
+        password,
+      });
 
-      const { data: cliente } = await supabase
-        .from('clientes')
-        .select('id, numero_cliente')
-        .eq('numero_cliente', email)
+      if (authError) throw new Error('Credenciales incorrectas.');
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('rol')
+        .eq('id', authData.user.id)
         .single();
 
-      if (cliente) {
-        localStorage.setItem('cliente_id', cliente.id);
-        router.push('/panel-cliente');
-        return;
-      }
-
-      throw new Error('Credenciales incorrectas.');
+      if (profile?.rol === 'cobrador') return router.push('/cobrador');
+      if (profile?.rol === 'supervisor') return router.push('/supervisor');
+      if (profile?.rol === 'cliente') return router.push('/panel-cliente');
+      return router.push('/');
     } catch {
       setErrorMsg('Acceso denegado. Verifica tu ID o contraseña.');
     } finally {
@@ -240,7 +229,7 @@ export default function LoginPage() {
             </div>
             <input
               type={showPassword ? 'text' : 'password'}
-              placeholder="Contraseña"
+              placeholder="Contraseña (clientes: tu No. cliente)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onFocus={() => setPasswordFocused(true)}

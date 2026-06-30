@@ -63,7 +63,7 @@ export default function DescargarPage() {
               <span className="text-yellow-400">en la palma de tu mano</span>
             </h1>
             <p className="text-gray-400 text-lg leading-relaxed mb-10">
-              CrediCabs es la app de gestión de créditos diseñada para cobradores, asesores y administradores.
+              CrediCabs es la app de gestión de créditos diseñada para cobradores, supervisores y administradores.
               Rápida, confiable y con notificaciones en tiempo real.
             </p>
             <a href={APK_URL} download="credicabs.apk"

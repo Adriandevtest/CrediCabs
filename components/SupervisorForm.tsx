@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export default function AsesorForm({ userId }: { userId?: string | null }) {
+export default function SupervisorForm({ userId }: { userId?: string | null }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '', telefono: '', direccion: '', ocupacion: '', ingresos: '', monto_solicitado: ''

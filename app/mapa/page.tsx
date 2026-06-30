@@ -61,7 +61,7 @@ export default function MapaPage() {
           </Link>
           <div>
             <h1 className="text-white font-black text-lg leading-tight">Rastreo en Vivo</h1>
-            <p className="text-gray-500 text-[10px] uppercase tracking-widest">Cobradores · Asesores</p>
+            <p className="text-gray-500 text-[10px] uppercase tracking-widest">Cobradores · Supervisores</p>
           </div>
         </div>
 

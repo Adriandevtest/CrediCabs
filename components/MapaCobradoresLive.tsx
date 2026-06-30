@@ -71,7 +71,7 @@ function tiempoTranscurrido(isoString: string): string {
 
 const COLORES: Record<string, string> = {
   cobrador: '#ef4444',
-  asesor: '#3b82f6',
+  supervisor: '#3b82f6',
 };
 
 const LIMITE_EN_LINEA = 10 * 60 * 1000; // 10 minutos
@@ -139,14 +139,14 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
         <div className="px-4 md:px-6 py-3 bg-gray-950 border border-gray-800 rounded-2xl flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
             <h2 className="text-white font-bold text-base">Ubicación en Tiempo Real</h2>
-            <p className="text-gray-500 text-xs">Cobradores y asesores activos</p>
+            <p className="text-gray-500 text-xs">Cobradores y supervisores activos</p>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-gray-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Cobrador
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Asesor
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Supervisor
             </span>
             <button onClick={cargarUbicaciones} className="text-gray-500 hover:text-yellow-400 transition-colors ml-1" title="Recargar">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +188,7 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
             <div className="w-full h-full bg-gray-900 flex flex-col items-center justify-center gap-3 text-center px-6">
               <p className="text-4xl">📍</p>
               <p className="text-gray-400 font-medium">Sin ubicaciones activas</p>
-              <p className="text-gray-600 text-sm">Los cobradores y asesores aparecerán aquí cuando estén en ruta</p>
+              <p className="text-gray-600 text-sm">Los cobradores y supervisores aparecerán aquí cuando estén en ruta</p>
             </div>
           ) : (
             <MapContainer
@@ -264,7 +264,7 @@ export default function MapaCobradoresLive({ fullscreen = false }: { fullscreen?
               <p className="text-white font-bold text-sm">Equipo en Ruta</p>
               <div className="flex items-center gap-2 text-[10px] text-gray-500">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Cobrador</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Asesor</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Supervisor</span>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-gray-800/60">

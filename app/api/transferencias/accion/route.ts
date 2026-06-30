@@ -17,25 +17,27 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch transferencia completa: cliente, crédito, asesor y cobrador
-    const { data: trans } = await supabaseAdmin
+    // Fetch transferencia — sin join a creditos para evitar fallo si la FK no está configurada
+    const { data: trans, error: transError } = await supabaseAdmin
       .from('transferencias')
-      .select('cliente_id, credito_id, monto, creditos(creado_por)')
+      .select('cliente_id, credito_id, monto')
       .eq('id', transferenciaId)
       .single();
 
-    const asesorId: string | null = (trans as any)?.creditos?.creado_por ?? null;
-
-    // Buscar cobrador asignado al cliente (necesario para notificarlo)
-    let cobradorId: string | null = null;
-    if (trans?.cliente_id) {
-      const { data: clienteRow } = await supabaseAdmin
-        .from('clientes')
-        .select('cobrador_asignado_id')
-        .eq('id', trans.cliente_id)
-        .single();
-      cobradorId = clienteRow?.cobrador_asignado_id ?? null;
+    if (transError || !trans) {
+      return NextResponse.json({ error: 'Transferencia no encontrada' }, { status: 404 });
     }
+
+    // Buscar cobrador y supervisor en paralelo
+    const [clienteRow, creditoRow] = await Promise.all([
+      supabaseAdmin.from('clientes').select('cobrador_asignado_id').eq('id', trans.cliente_id).single(),
+      trans.credito_id
+        ? supabaseAdmin.from('creditos').select('creado_por').eq('id', trans.credito_id).single()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const cobradorId: string | null = clienteRow.data?.cobrador_asignado_id ?? null;
+    const supervisorId: string | null = (creditoRow as any).data?.creado_por ?? null;
 
     const broadcastHeaders = {
       'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -155,9 +157,9 @@ export async function POST(request: Request) {
         sendPushToUserIds([cobradorId], '💳 Pago aprobado', msgCobrador).catch(() => {});
       }
 
-      // Notificar al ASESOR
-      if (asesorId) {
-        sendPushToUserIds([asesorId], '✅ Pago aprobado', `Pago de ${montoFmt} aprobado.`).catch(() => {});
+      // Notificar al SUPERVISOR
+      if (supervisorId) {
+        sendPushToUserIds([supervisorId], '✅ Pago aprobado', `Pago de ${montoFmt} aprobado.`).catch(() => {});
       }
 
     } else if (accion === 'rechazar') {
@@ -180,8 +182,8 @@ export async function POST(request: Request) {
         sendPushToCliente(trans.cliente_id, '❌ Comprobante rechazado', msgRechazado).catch(() => {});
       }
 
-      if (asesorId) {
-        sendPushToUserIds([asesorId], '❌ Comprobante rechazado', `Un comprobante de ${montoFmt} fue rechazado.`).catch(() => {});
+      if (supervisorId) {
+        sendPushToUserIds([supervisorId], '❌ Comprobante rechazado', `Un comprobante de ${montoFmt} fue rechazado.`).catch(() => {});
       }
 
       // Notificar al cobrador del rechazo también
