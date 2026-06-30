@@ -141,26 +141,6 @@ export default function ClientesPage() {
             >
               <span>+</span> NUEVO
             </button>
-
-            {isModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-black/80 backdrop-blur-sm">
-                <div
-                  className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col"
-                  style={{ maxHeight: '90dvh' }}
-                >
-                  <div className="shrink-0 p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-2xl">
-                    <h2 className="text-xl font-bold text-white uppercase tracking-widest">Alta de Cliente</h2>
-                    <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-                  </div>
-                  <div className="overflow-y-auto flex-1 min-h-0">
-                    <RegisterClientForm
-                      cobradores={cobradores}
-                      onSuccess={() => { setIsModalOpen(false); setRefreshKey(k => k + 1); }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </header>
 
@@ -188,6 +168,27 @@ export default function ClientesPage() {
         {vista === 'mora'     && <ClientesEnMora searchQuery={searchQuery} />}
 
       </div>
+
+      {/* Modal Alta de Cliente */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-black/80 backdrop-blur-sm">
+          <div
+            className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col"
+            style={{ maxHeight: '90dvh' }}
+          >
+            <div className="shrink-0 p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-2xl">
+              <h2 className="text-xl font-bold text-white uppercase tracking-widest">Alta de Cliente</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <RegisterClientForm
+                cobradores={cobradores}
+                onSuccess={() => { setIsModalOpen(false); setRefreshKey(k => k + 1); }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
