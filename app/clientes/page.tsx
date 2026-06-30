@@ -9,7 +9,6 @@ import RegisterClientForm from '../../components/RegisterClientForm';
 import ClientesEnMora from '../../components/ClientesEnMora';
 import CreditosActivos from '../../components/CreditosActivos';
 import { Input } from '../../components/ui/input';
-import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from '../../components/ui/dialog';
 
 type Vista = 'todos' | 'mora' | 'creditos';
 
@@ -136,21 +135,32 @@ export default function ClientesPage() {
               />
             </div>
 
-            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-              <DialogTrigger asChild>
-                <button className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-black flex items-center gap-2 shadow-lg transition-all whitespace-nowrap">
-                  <span>+</span> NUEVO
-                </button>
-              </DialogTrigger>
-              <DialogContent className="p-0 bg-transparent border-none shadow-none max-w-2xl outline-none">
-                <DialogTitle className="sr-only">Nuevo Cliente</DialogTitle>
-                <DialogDescription className="sr-only">Formulario para agregar un nuevo cliente y otorgar crédito.</DialogDescription>
-                <RegisterClientForm
-                  cobradores={cobradores}
-                  onSuccess={() => { setIsModalOpen(false); setRefreshKey(k => k + 1); }}
-                />
-              </DialogContent>
-            </Dialog>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-black flex items-center gap-2 shadow-lg transition-all whitespace-nowrap"
+            >
+              <span>+</span> NUEVO
+            </button>
+
+            {isModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4 bg-black/80 backdrop-blur-sm">
+                <div
+                  className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+                  style={{ maxHeight: '90dvh' }}
+                >
+                  <div className="shrink-0 p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-2xl">
+                    <h2 className="text-xl font-bold text-white uppercase tracking-widest">Alta de Cliente</h2>
+                    <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+                  </div>
+                  <div className="overflow-y-auto flex-1 min-h-0">
+                    <RegisterClientForm
+                      cobradores={cobradores}
+                      onSuccess={() => { setIsModalOpen(false); setRefreshKey(k => k + 1); }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
