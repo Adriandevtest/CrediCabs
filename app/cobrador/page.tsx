@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '../../lib/supabase';
-import { calcularMora, MORA_POR_DIA } from '../../lib/mora';
+import { MORA_POR_DIA } from '../../lib/mora';
 import UserNav from '../../components/UserNav';
 import GeoTracker from '../../components/GeoTracker';
 
@@ -42,6 +42,10 @@ export default function CobradorPage() {
 
   // ── Detalle hoja de pagos ──
   const [detalleCliente, setDetalleCliente] = useState<any | null>(null);
+
+  // ── Pago parcial / mora independiente ──
+  const [montosInput, setMontosInput] = useState<Record<string, string>>({});
+  const [pagandoMora, setPagandoMora] = useState<string | null>(null);
 
   const router = useRouter();
   const today = new Date().toLocaleDateString('en-CA');
@@ -143,7 +147,7 @@ export default function CobradorPage() {
           profiles (nombre_completo, telefono),
           creditos (
             id, monto_diario, estado, monto_total, interes_total, tasa_interes_porcentaje,
-            pagos_diarios (id, pagado, fecha_esperada, numero_dia)
+            pagos_diarios (id, pagado, fecha_esperada, numero_dia, mora, monto_pagado)
           )
         `)
         .eq('cobrador_asignado_id', user.id)
@@ -231,13 +235,13 @@ export default function CobradorPage() {
     }
   };
 
-  const registrarPago = async (entryKey: string, creditoId: string, totalACobrar: number = 0) => {
+  const registrarPago = async (entryKey: string, creditoId: string, montoCobrado: number) => {
+    if (montoCobrado <= 0) { alert('Ingresa un monto válido.'); return; }
     setProcesandoPago(creditoId);
     try {
-      // Obtener TODOS los pagos vencidos + el de hoy (si existe) sin pagar
       const { data: pagosDebidos, error: findError } = await supabase
         .from('pagos_diarios')
-        .select('id, fecha_esperada')
+        .select('id, fecha_esperada, monto_pagado')
         .eq('credito_id', creditoId)
         .eq('pagado', false)
         .lte('fecha_esperada', today)
@@ -247,23 +251,35 @@ export default function CobradorPage() {
         throw new Error('No hay pagos pendientes.');
       }
 
-      // Pagos atrasados (< hoy) llevan $50 mora c/u; el de hoy lleva $0
-      const atrasadosIds = pagosDebidos.filter(p => p.fecha_esperada < today).map(p => p.id);
-      const hoyIds = pagosDebidos.filter(p => p.fecha_esperada === today).map(p => p.id);
+      const entry = ruta.find((c) => c._entryKey === entryKey);
+      const cuotaBase = entry?._credito?.monto_diario || 0;
 
-      if (atrasadosIds.length > 0) {
-        const { error: e1 } = await supabase
-          .from('pagos_diarios')
-          .update({ pagado: true, mora: MORA_POR_DIA })
-          .in('id', atrasadosIds);
-        if (e1) throw e1;
-      }
-      if (hoyIds.length > 0) {
-        const { error: e2 } = await supabase
-          .from('pagos_diarios')
-          .update({ pagado: true, mora: 0 })
-          .in('id', hoyIds);
-        if (e2) throw e2;
+      let montoRestante = montoCobrado;
+      const updatedPagos = new Map<string, Partial<{ pagado: boolean; monto_pagado: number }>>();
+
+      for (const pago of pagosDebidos) {
+        if (montoRestante <= 0) break;
+
+        const yaAbonado = Number(pago.monto_pagado) || 0;
+        const pendienteEste = cuotaBase - yaAbonado;
+        if (pendienteEste <= 0) continue;
+
+        if (montoRestante >= pendienteEste) {
+          const { error } = await supabase.from('pagos_diarios')
+            .update({ pagado: true, monto_pagado: cuotaBase })
+            .eq('id', pago.id);
+          if (error) throw error;
+          updatedPagos.set(pago.id, { pagado: true, monto_pagado: cuotaBase });
+          montoRestante -= pendienteEste;
+        } else {
+          const nuevoAbonado = yaAbonado + montoRestante;
+          const { error } = await supabase.from('pagos_diarios')
+            .update({ monto_pagado: nuevoAbonado })
+            .eq('id', pago.id);
+          if (error) throw error;
+          updatedPagos.set(pago.id, { monto_pagado: nuevoAbonado });
+          montoRestante = 0;
+        }
       }
 
       // Si no quedan más pagos pendientes, marcar el crédito como liquidado
@@ -276,22 +292,84 @@ export default function CobradorPage() {
         await supabase.from('creditos').update({ estado: 'liquidado' }).eq('id', creditoId);
       }
 
-      const entry = ruta.find((c) => c._entryKey === entryKey);
-      if (entry) {
-        setCompletados((prev) => [...prev, entry]);
-        setRuta((prev) => prev.filter((c) => c._entryKey !== entryKey));
+      // ¿Todos los vencidos quedaron pagados?
+      const allDuePaid = pagosDebidos.every((p) => updatedPagos.get(p.id)?.pagado === true);
 
-        const clienteNombre = (entry.profiles as any)?.nombre_completo || `Cliente ${entry.numero_cliente}`;
-        fetch('/api/notifications/pago-registrado', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clienteNombre, monto: totalACobrar }),
-        }).catch(() => {});
+      if (allDuePaid) {
+        if (entry) {
+          setCompletados((prev) => [...prev, entry]);
+          setRuta((prev) => prev.filter((c) => c._entryKey !== entryKey));
+          const clienteNombre = (entry.profiles as any)?.nombre_completo || `Cliente ${entry.numero_cliente}`;
+          fetch('/api/notifications/pago-registrado', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clienteNombre, monto: montoCobrado }),
+          }).catch(() => {});
+        }
+      } else {
+        // Abono parcial — actualizar estado local sin recargar
+        setRuta((prev) => prev.map((c) => {
+          if (c._entryKey !== entryKey) return c;
+          return {
+            ...c,
+            _credito: {
+              ...c._credito,
+              pagos_diarios: (c._credito.pagos_diarios || []).map((p: any) => {
+                const updated = updatedPagos.get(p.id);
+                return updated ? { ...p, ...updated } : p;
+              }),
+            },
+          };
+        }));
       }
+
+      // Limpiar input
+      setMontosInput((prev) => { const n = { ...prev }; delete n[entryKey]; return n; });
     } catch (e: any) {
       alert('Error al registrar pago: ' + e.message);
     } finally {
       setProcesandoPago(null);
+    }
+  };
+
+  const cobrarMora = async (creditoId: string) => {
+    setPagandoMora(creditoId);
+    try {
+      const { data: atrasados, error } = await supabase
+        .from('pagos_diarios')
+        .select('id, mora')
+        .eq('credito_id', creditoId)
+        .eq('pagado', false)
+        .lt('fecha_esperada', today);
+
+      if (error) throw error;
+
+      const sinMora = (atrasados || []).filter((p) => !p.mora);
+      if (sinMora.length === 0) { alert('No hay mora pendiente de cobrar.'); return; }
+
+      const { error: upErr } = await supabase
+        .from('pagos_diarios')
+        .update({ mora: MORA_POR_DIA })
+        .in('id', sinMora.map((p) => p.id));
+      if (upErr) throw upErr;
+
+      const idsActualizados = new Set(sinMora.map((p) => p.id));
+      setRuta((prev) => prev.map((c) => {
+        if (c._creditoId !== creditoId) return c;
+        return {
+          ...c,
+          _credito: {
+            ...c._credito,
+            pagos_diarios: (c._credito.pagos_diarios || []).map((p: any) =>
+              idsActualizados.has(p.id) ? { ...p, mora: MORA_POR_DIA } : p
+            ),
+          },
+        };
+      }));
+    } catch (e: any) {
+      alert('Error al cobrar mora: ' + e.message);
+    } finally {
+      setPagandoMora(null);
     }
   };
 
@@ -306,7 +384,11 @@ export default function CobradorPage() {
   const totalDia = [...ruta, ...completados].reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
   const totalCobrado = completados.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
   const totalPendiente = ruta.reduce((a, c) => a + (c._credito?.monto_diario || 0), 0);
-  const morasPendientes = ruta.reduce((a, c) => a + calcularMora(c._credito?.pagos_diarios || []), 0);
+  const morasPendientes = ruta.reduce((a, c) => {
+    const pagos = c._credito?.pagos_diarios || [];
+    const atrasados = pagos.filter((p: any) => !p.pagado && p.fecha_esperada < today);
+    return a + atrasados.filter((p: any) => !p.mora).length * MORA_POR_DIA;
+  }, 0);
   const progreso = ruta.length + completados.length > 0
     ? Math.round((completados.length / (ruta.length + completados.length)) * 100)
     : 0;
@@ -414,14 +496,18 @@ export default function CobradorPage() {
                         if (!credito) return null;
                         const isProcessing = procesandoPago === cliente._creditoId;
                         const atrasado = credito?.estado === 'atrasado';
-                        const mora = calcularMora(credito.pagos_diarios || []);
-                        // Todos los pagos vencidos + el de hoy que se cobrarán juntos
-                        const diasPagar = (credito.pagos_diarios || []).filter(
-                          (p: any) => !p.pagado && p.fecha_esperada <= today
-                        ).length;
-                        const totalACobrar = Math.round(credito.monto_diario * (diasPagar || 1)) + mora;
 
-                        const pagosOrdenados =[...(credito.pagos_diarios || [])].sort(
+                        const pagosVencidos = (credito.pagos_diarios || []).filter(
+                          (p: any) => !p.pagado && p.fecha_esperada <= today
+                        );
+                        const pagosAtrasadosLocales = pagosVencidos.filter((p: any) => p.fecha_esperada < today);
+                        const diasPagar = pagosVencidos.length;
+                        const totalCuotas = Math.round(credito.monto_diario) * diasPagar;
+                        const yaAbonado = pagosVencidos.reduce((s: number, p: any) => s + (Number(p.monto_pagado) || 0), 0);
+                        const cuotaPendiente = Math.max(0, totalCuotas - yaAbonado);
+                        const moraPendiente = pagosAtrasadosLocales.filter((p: any) => !p.mora).length * MORA_POR_DIA;
+
+                        const pagosOrdenados = [...(credito.pagos_diarios || [])].sort(
                           (a: any, b: any) => a.numero_dia - b.numero_dia
                         );
                         const nextPago = pagosOrdenados.find((p: any) => !p.pagado);
@@ -479,45 +565,54 @@ export default function CobradorPage() {
                               </div>
                             )}
 
-                            <div className={`rounded-xl p-3 mb-3 ${mora > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
-                              {mora > 0 ? (
-                                <>
-                                  {/* Desglose para clientes con mora */}
-                                  <div className="flex justify-between items-center mb-1.5">
-                                    <p className="text-xs text-gray-500 uppercase tracking-wider">
-                                      Cuotas ({diasPagar} × ${Math.round(credito.monto_diario).toLocaleString('es-MX')})
+                            {/* Cuota */}
+                            <div className={`rounded-xl p-3 mb-3 ${moraPendiente > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <p className="text-xs text-gray-400 uppercase tracking-wider">
+                                    {diasPagar > 1 ? `${diasPagar} cuotas pendientes` : 'Cuota del día'}
+                                  </p>
+                                  {yaAbonado > 0 && (
+                                    <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                                      Abonado ${yaAbonado.toLocaleString('es-MX')} · Resta ${cuotaPendiente.toLocaleString('es-MX')}
                                     </p>
-                                    <p className="text-sm font-semibold text-gray-800">
-                                      ${Math.round(credito.monto_diario * diasPagar).toLocaleString('es-MX')}
-                                    </p>
-                                  </div>
-                                  <div className="flex justify-between items-center mb-1.5">
-                                    <p className="text-xs text-red-500 uppercase tracking-wider font-bold">
-                                      Mora ({mora / MORA_POR_DIA} × $50)
-                                    </p>
-                                    <p className="text-sm font-bold text-red-600">+${mora.toLocaleString('es-MX')}</p>
-                                  </div>
-                                  <div className="pt-2 border-t border-red-200 flex justify-between items-center">
-                                    <p className="text-xs text-red-700 font-bold uppercase tracking-wider">Total a cobrar</p>
-                                    <p className="text-lg font-black text-red-700">${totalACobrar.toLocaleString('es-MX')}</p>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="flex justify-between items-center">
-                                  <div>
-                                    <p className="text-xs text-gray-400 uppercase tracking-wider">Cuota del día</p>
-                                    <p className="text-xl font-semibold text-red-600 mt-0.5">
-                                      ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
-                                    </p>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-xs text-gray-400 uppercase tracking-wider">Total crédito</p>
-                                    <p className="text-base font-medium text-gray-700 mt-0.5">
-                                      ${Math.round(credito.monto_total).toLocaleString('es-MX')}
-                                    </p>
-                                  </div>
+                                  )}
+                                </div>
+                                <p className="text-xl font-semibold text-red-600">${cuotaPendiente.toLocaleString('es-MX')}</p>
+                              </div>
+                              {moraPendiente > 0 && (
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-red-100">
+                                  <p className="text-xs text-red-500 uppercase tracking-wider font-bold">
+                                    Mora ({pagosAtrasadosLocales.filter((p: any) => !p.mora).length} × $50) — cobrar aparte
+                                  </p>
+                                  <p className="text-sm font-bold text-red-600">+${moraPendiente.toLocaleString('es-MX')}</p>
                                 </div>
                               )}
+                            </div>
+
+                            {/* Input de monto recibido */}
+                            <div className="mb-3">
+                              <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Monto recibido</label>
+                              <div className="flex items-center bg-white border border-gray-200 rounded-xl overflow-hidden">
+                                <span className="pl-3 text-gray-400 text-sm font-medium">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  className="flex-1 px-2 py-2.5 bg-transparent text-gray-900 font-semibold text-sm outline-none"
+                                  value={montosInput[cliente._entryKey] !== undefined ? montosInput[cliente._entryKey] : cuotaPendiente}
+                                  onChange={(e) => setMontosInput((prev) => ({ ...prev, [cliente._entryKey]: e.target.value }))}
+                                />
+                                {montosInput[cliente._entryKey] !== undefined && Number(montosInput[cliente._entryKey]) !== cuotaPendiente && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setMontosInput((prev) => ({ ...prev, [cliente._entryKey]: String(cuotaPendiente) }))}
+                                    className="px-2.5 py-2 text-[10px] text-red-600 font-bold border-l border-gray-200 whitespace-nowrap"
+                                  >
+                                    Total
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {credito.interes_total > 0 && (
@@ -538,30 +633,47 @@ export default function CobradorPage() {
                               </div>
                             )}
 
-                            <button
-                              onClick={() => registrarPago(cliente._entryKey, cliente._creditoId, totalACobrar)}
-                              disabled={isProcessing}
-                              className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
-                            >
-                              {isProcessing ? (
-                                <span className="animate-pulse">Procesando...</span>
-                              ) : (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                                  </svg>
-                                  {mora > 0 ? `Cobrar $${totalACobrar.toLocaleString('es-MX')}` : 'Registrar pago'}
-                                </>
+                            <div className="flex flex-col gap-2">
+                              {moraPendiente > 0 && (
+                                <button
+                                  onClick={() => cobrarMora(cliente._creditoId)}
+                                  disabled={pagandoMora === cliente._creditoId}
+                                  className="w-full border-2 border-red-300 text-red-600 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:bg-red-50 disabled:opacity-50 transition-colors"
+                                >
+                                  {pagandoMora === cliente._creditoId
+                                    ? 'Registrando mora...'
+                                    : `Cobrar mora +$${moraPendiente.toLocaleString('es-MX')}`}
+                                </button>
                               )}
-                            </button>
-                            <button
-                              onClick={() => setDetalleCliente(cliente)}
-                              className="w-full py-2 border border-gray-200 text-gray-400 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors"
-                            >
-                              <i className="fa-solid fa-calendar-days text-xs" />
-                              Ver hoja de pagos
-                            </button>
+                              <button
+                                onClick={() => {
+                                  const inputStr = montosInput[cliente._entryKey];
+                                  const monto = inputStr !== undefined && inputStr !== '' ? Number(inputStr) : cuotaPendiente;
+                                  registrarPago(cliente._entryKey, cliente._creditoId, monto);
+                                }}
+                                disabled={isProcessing || cuotaPendiente <= 0}
+                                className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
+                              >
+                                {isProcessing ? (
+                                  <span className="animate-pulse">Procesando...</span>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                        d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
+                                    Registrar pago
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => setDetalleCliente(cliente)}
+                                className="w-full py-2 border border-gray-200 text-gray-400 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                              >
+                                <i className="fa-solid fa-calendar-days text-xs" />
+                                Ver hoja de pagos
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
