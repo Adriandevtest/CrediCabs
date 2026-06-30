@@ -22,8 +22,10 @@ export default function ActionModal({ isOpen, onClose, cobradores }: ActionModal
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col max-h-[92vh] md:max-h-[88vh]">
-
+      <div
+        className="bg-gray-950 border border-red-900 w-full max-w-2xl rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+        style={{ maxHeight: '90dvh' }}
+      >
         {/* Cabecera fija */}
         <div className="shrink-0 p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-2xl">
           <h2 className="text-xl font-bold text-white uppercase tracking-widest">
@@ -32,8 +34,8 @@ export default function ActionModal({ isOpen, onClose, cobradores }: ActionModal
           <button onClick={handleClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
 
-        {/* Contenido desplazable */}
-        <div className="overflow-y-auto flex-1">
+        {/* Contenido desplazable — min-h-0 necesario para que flex+overflow funcione */}
+        <div className="overflow-y-auto flex-1 min-h-0">
           {step === 'select' && (
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
