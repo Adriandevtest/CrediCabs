@@ -22,7 +22,21 @@ export async function POST(request: NextRequest) {
       titulo,
       mensaje,
       tipo: 'pago',
-    }).then(() => {});
+    });
+
+    // Broadcast en tiempo real — necesario para que NotifBell del admin actualice
+    // (postgres_changes es poco fiable; el broadcast es garantizado desde servidor)
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/realtime/v1/api/broadcast`, {
+        method: 'POST',
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: [{ topic: 'notif-admin', event: 'nueva_notif', payload: {} }] }),
+      });
+    } catch { }
 
     // Push nativa a admins
     sendPushToAdmins(titulo, mensaje).catch(() => {});

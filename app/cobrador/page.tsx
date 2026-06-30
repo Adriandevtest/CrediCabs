@@ -157,7 +157,7 @@ export default function CobradorPage() {
 
       (data || []).forEach((cliente) => {
         const creditosActivos = (cliente.creditos || []).filter(
-          (c: any) => c.estado !== 'completado'
+          (c: any) => c.estado !== 'liquidado'
         );
         const tieneMultiples = creditosActivos.length > 1;
         creditosActivos.forEach((credito: any, idx: number) => {

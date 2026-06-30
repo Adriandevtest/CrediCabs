@@ -86,6 +86,14 @@ export default function PanelCliente() {
   const [transferSuccess, setTransferSuccess] = useState(false);
   const [transferError, setTransferError] = useState('');
 
+  const [showCambioPass, setShowCambioPass] = useState(false);
+  const [passActual, setPassActual]   = useState('');
+  const [passNueva, setPassNueva]     = useState('');
+  const [passConfirm, setPassConfirm] = useState('');
+  const [guardandoPass, setGuardandoPass] = useState(false);
+  const [errorPass, setErrorPass]   = useState('');
+  const [exitoPass, setExitoPass]   = useState(false);
+
   const [navTab, setNavTab] = useState<NavTab>('inicio');
   const [filtroHist, setFiltroHist] = useState<FiltroHist>('todos');
   const [calYear, setCalYear] = useState(() => new Date().getFullYear());
@@ -126,40 +134,42 @@ export default function PanelCliente() {
   }, []);
 
   useEffect(() => {
-    const id = localStorage.getItem('cliente_id');
-    if (!id) { router.push('/login'); return; }
-    setClienteId(id);
-    cargarDatos(id);
+    let cleanup: (() => void) | undefined;
 
-    // Broadcast: el API envía esto al aprobar → canal principal
-    const chBc = supabase
-      .channel(`pagos-cliente-${id}`)
-      .on('broadcast', { event: 'pago_aprobado' }, () => {
-        setPagoReciente(true);
-        setTimeout(() => setPagoReciente(false), 4000);
-        cargarDatos(id);
-      })
-      .subscribe();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { router.push('/login'); return; }
+      const id = user.id;
+      setClienteId(id);
+      cargarDatos(id);
 
-    // postgres_changes: funciona si pagos_diarios está publicada en Realtime
-    const chPg = supabase
-      .channel(`cliente-pagos-rt-${id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
-        setPagoReciente(true);
-        setTimeout(() => setPagoReciente(false), 4000);
-        cargarDatos(id);
-      })
-      .subscribe();
+      const chBc = supabase
+        .channel(`pagos-cliente-${id}`)
+        .on('broadcast', { event: 'pago_aprobado' }, () => {
+          setPagoReciente(true);
+          setTimeout(() => setPagoReciente(false), 4000);
+          cargarDatos(id);
+        })
+        .subscribe();
 
-    // Polling cada 12 s — respaldo garantizado para Capacitor/Android donde
-    // el WebSocket de Realtime puede no establecerse correctamente
-    const poll = setInterval(() => cargarDatos(id), 12000);
+      const chPg = supabase
+        .channel(`cliente-pagos-rt-${id}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
+          setPagoReciente(true);
+          setTimeout(() => setPagoReciente(false), 4000);
+          cargarDatos(id);
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(chPg);
-      supabase.removeChannel(chBc);
-      clearInterval(poll);
-    };
+      const poll = setInterval(() => cargarDatos(id), 12000);
+
+      cleanup = () => {
+        supabase.removeChannel(chPg);
+        supabase.removeChannel(chBc);
+        clearInterval(poll);
+      };
+    });
+
+    return () => { cleanup?.(); };
   }, [router, cargarDatos]);
 
   // Set calendar to the month of first pending payment once data loads
@@ -181,7 +191,7 @@ export default function PanelCliente() {
     setTransferLoading(true);
     setTransferError('');
     try {
-      const id = localStorage.getItem('cliente_id');
+      const id = clienteId;
       if (!id) throw new Error('No autenticado');
       const fileToSend = transferFile.type.startsWith('image/') ? await compressImage(transferFile) : transferFile;
       const fd = new FormData();
@@ -201,7 +211,37 @@ export default function PanelCliente() {
     }
   };
 
-  const cerrarSesion = () => { localStorage.removeItem('cliente_id'); router.push('/login'); };
+  const cerrarSesion = async () => { await supabase.auth.signOut(); router.push('/login'); };
+
+  const handleCambioPass = async () => {
+    setErrorPass('');
+    if (!passNueva || !passConfirm) { setErrorPass('Completa todos los campos.'); return; }
+    if (passNueva !== passConfirm)  { setErrorPass('Las contraseñas nuevas no coinciden.'); return; }
+    if (passNueva.length < 6)       { setErrorPass('La contraseña debe tener al menos 6 caracteres.'); return; }
+
+    setGuardandoPass(true);
+    try {
+      // Verificar contraseña actual re-autenticando
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error('No autenticado.');
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: passActual,
+      });
+      if (signInErr) { setErrorPass('La contraseña actual es incorrecta.'); return; }
+
+      const { error: updateErr } = await supabase.auth.updateUser({ password: passNueva });
+      if (updateErr) throw updateErr;
+
+      setExitoPass(true);
+      setPassActual(''); setPassNueva(''); setPassConfirm('');
+      setTimeout(() => { setShowCambioPass(false); setExitoPass(false); }, 2000);
+    } catch (e: any) {
+      setErrorPass(e.message || 'Error al cambiar contraseña.');
+    } finally {
+      setGuardandoPass(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -291,6 +331,13 @@ export default function PanelCliente() {
               </span>
             )}
             <NotifBell filterId={clienteId ?? undefined} storageKey="notif_seen_cliente" />
+            <button
+              onClick={() => { setShowCambioPass(true); setErrorPass(''); setExitoPass(false); }}
+              className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800 transition-colors"
+              title="Cambiar contraseña"
+            >
+              <i className="fa-solid fa-gear text-sm" />
+            </button>
             <button
               onClick={cerrarSesion}
               className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800 transition-colors"
@@ -883,6 +930,94 @@ export default function PanelCliente() {
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* ══════════════ MODAL CAMBIO DE CONTRASEÑA ══════════════ */}
+      {showCambioPass && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-t-3xl p-6 space-y-4">
+            {/* Header */}
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-center justify-center">
+                  <i className="fa-solid fa-lock text-yellow-400 text-xs" />
+                </div>
+                <p className="text-white font-black text-base">Cambiar contraseña</p>
+              </div>
+              <button
+                onClick={() => { setShowCambioPass(false); setPassActual(''); setPassNueva(''); setPassConfirm(''); setErrorPass(''); setExitoPass(false); }}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-700 text-gray-400 active:bg-gray-800"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {exitoPass ? (
+              <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-2xl p-6 text-center">
+                <i className="fa-solid fa-circle-check text-emerald-400 text-3xl mb-2 block" />
+                <p className="text-emerald-300 font-bold">¡Contraseña actualizada!</p>
+              </div>
+            ) : (
+              <>
+                {/* Contraseña actual */}
+                <div>
+                  <label className="text-gray-400 text-xs font-medium block mb-1.5">Contraseña actual</label>
+                  <input
+                    type="password"
+                    value={passActual}
+                    onChange={e => setPassActual(e.target.value)}
+                    placeholder="Tu contraseña actual"
+                    className="w-full px-4 py-3 rounded-2xl text-sm text-white placeholder:text-gray-600 bg-gray-800 border border-gray-700 focus:border-yellow-500/50 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Nueva contraseña */}
+                <div>
+                  <label className="text-gray-400 text-xs font-medium block mb-1.5">Nueva contraseña</label>
+                  <input
+                    type="password"
+                    value={passNueva}
+                    onChange={e => setPassNueva(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full px-4 py-3 rounded-2xl text-sm text-white placeholder:text-gray-600 bg-gray-800 border border-gray-700 focus:border-yellow-500/50 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Confirmar nueva */}
+                <div>
+                  <label className="text-gray-400 text-xs font-medium block mb-1.5">Confirmar nueva contraseña</label>
+                  <input
+                    type="password"
+                    value={passConfirm}
+                    onChange={e => setPassConfirm(e.target.value)}
+                    placeholder="Repite la nueva contraseña"
+                    className="w-full px-4 py-3 rounded-2xl text-sm text-white placeholder:text-gray-600 bg-gray-800 border border-gray-700 focus:border-yellow-500/50 focus:outline-none transition-colors"
+                    onKeyDown={e => e.key === 'Enter' && handleCambioPass()}
+                  />
+                </div>
+
+                {errorPass && (
+                  <div className="bg-red-950/40 border border-red-800/50 rounded-xl px-4 py-3 flex items-center gap-2">
+                    <i className="fa-solid fa-triangle-exclamation text-red-400 text-xs shrink-0" />
+                    <p className="text-red-300 text-xs">{errorPass}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCambioPass}
+                  disabled={guardandoPass}
+                  className="w-full py-4 rounded-2xl font-bold text-white text-sm tracking-wide bg-yellow-500 active:bg-yellow-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {guardandoPass ? (
+                    <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando...</>
+                  ) : (
+                    <><i className="fa-solid fa-floppy-disk" />Guardar contraseña</>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
