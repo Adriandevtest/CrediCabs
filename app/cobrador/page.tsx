@@ -47,6 +47,14 @@ export default function CobradorPage() {
   const [montosInput, setMontosInput] = useState<Record<string, string>>({});
   const [pagandoMora, setPagandoMora] = useState<string | null>(null);
 
+  // ── Confirmación de acciones ──
+  const [confirmacion, setConfirmacion] = useState<{
+    tipo: 'pago' | 'mora';
+    clienteNombre: string;
+    monto: number;
+    onConfirmar: () => void;
+  } | null>(null);
+
   const router = useRouter();
   const today = new Date().toLocaleDateString('en-CA');
   const fechaHoy = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -635,7 +643,12 @@ export default function CobradorPage() {
                             <div className="flex flex-col gap-2">
                               {moraPendiente > 0 && (
                                 <button
-                                  onClick={() => cobrarMora(cliente._creditoId)}
+                                  onClick={() => setConfirmacion({
+                                    tipo: 'mora',
+                                    clienteNombre: cliente.profiles?.nombre_completo || '',
+                                    monto: moraPendiente,
+                                    onConfirmar: () => { setConfirmacion(null); cobrarMora(cliente._creditoId); },
+                                  })}
                                   disabled={pagandoMora === cliente._creditoId}
                                   className="w-full border-2 border-red-300 text-red-600 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:bg-red-50 disabled:opacity-50 transition-colors"
                                 >
@@ -648,7 +661,12 @@ export default function CobradorPage() {
                                 onClick={() => {
                                   const inputStr = montosInput[cliente._entryKey];
                                   const monto = inputStr !== undefined && inputStr !== '' ? Number(inputStr) : cuotaPendiente;
-                                  registrarPago(cliente._entryKey, cliente._creditoId, monto);
+                                  setConfirmacion({
+                                    tipo: 'pago',
+                                    clienteNombre: cliente.profiles?.nombre_completo || '',
+                                    monto,
+                                    onConfirmar: () => { setConfirmacion(null); registrarPago(cliente._entryKey, cliente._creditoId, monto); },
+                                  });
                                 }}
                                 disabled={isProcessing || cuotaPendiente <= 0}
                                 className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-60 transition-colors text-white py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
@@ -917,6 +935,47 @@ export default function CobradorPage() {
         )}
 
       </div>
+
+      {/* ── CONFIRMACIÓN DE PAGO / MORA ── */}
+      {confirmacion && (
+        <>
+          <div
+            className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmacion(null)}
+          />
+          <div
+            className="fixed inset-x-0 bottom-0 z-[121] bg-white rounded-t-3xl px-5 pt-4 pb-6"
+            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+          >
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+            <p className="text-center text-gray-400 text-[11px] uppercase tracking-widest mb-1">
+              {confirmacion.tipo === 'pago' ? '¿Registrar pago?' : '¿Registrar mora?'}
+            </p>
+            <p className="text-center font-bold text-gray-900 text-base leading-tight mb-1">
+              {confirmacion.clienteNombre}
+            </p>
+            <p className="text-center text-3xl font-black text-red-600 mb-6">
+              ${confirmacion.monto.toLocaleString('es-MX')}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmacion(null)}
+                className="flex-1 py-3.5 border-2 border-gray-200 text-gray-600 font-semibold rounded-2xl text-sm active:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmacion.onConfirmar}
+                className={`flex-1 py-3.5 font-bold rounded-2xl text-sm text-white active:opacity-80 transition-opacity ${
+                  confirmacion.tipo === 'pago' ? 'bg-red-600' : 'bg-red-500'
+                }`}
+              >
+                {confirmacion.tipo === 'pago' ? 'Confirmar pago' : 'Confirmar mora'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── MODAL HOJA DE PAGOS ── */}
       {detalleCliente && (() => {
