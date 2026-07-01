@@ -42,6 +42,7 @@ export default function CobradorPage() {
 
   // ── Detalle hoja de pagos ──
   const [detalleCliente, setDetalleCliente] = useState<any | null>(null);
+  const [tabDetalle, setTabDetalle] = useState<'perfil' | 'pagos'>('perfil');
 
   // ── Pago parcial / mora independiente ──
   const [montosInput, setMontosInput] = useState<Record<string, string>>({});
@@ -151,7 +152,7 @@ export default function CobradorPage() {
         .from('clientes')
         .select(`
           id, numero_cliente, direccion,
-          profiles (nombre_completo, telefono),
+          profiles (nombre_completo, telefono, email),
           creditos (
             id, monto_diario, estado, monto_total, interes_total, tasa_interes_porcentaje,
             pagos_diarios (id, pagado, fecha_esperada, numero_dia, mora, monto_pagado)
@@ -684,11 +685,11 @@ export default function CobradorPage() {
                                 )}
                               </button>
                               <button
-                                onClick={() => setDetalleCliente(cliente)}
+                                onClick={() => { setDetalleCliente(cliente); setTabDetalle('perfil'); }}
                                 className="w-full py-2 border border-gray-200 text-gray-400 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors"
                               >
-                                <i className="fa-solid fa-calendar-days text-xs" />
-                                Ver hoja de pagos
+                                <i className="fa-solid fa-user text-xs" />
+                                Ver perfil del cliente
                               </button>
                             </div>
                           </div>
@@ -733,11 +734,11 @@ export default function CobradorPage() {
                               +${Math.round(credito?.monto_diario || 0).toLocaleString('es-MX')}
                             </p>
                             <button
-                              onClick={() => setDetalleCliente(cliente)}
+                              onClick={() => { setDetalleCliente(cliente); setTabDetalle('perfil'); }}
                               className="shrink-0 w-8 h-8 rounded-full border border-emerald-300 flex items-center justify-center text-emerald-600 hover:bg-emerald-100 active:bg-emerald-200 transition-colors"
-                              title="Ver hoja de pagos"
+                              title="Ver perfil del cliente"
                             >
-                              <i className="fa-solid fa-calendar-days text-xs" />
+                              <i className="fa-solid fa-user text-xs" />
                             </button>
                           </div>
                         );
@@ -977,10 +978,11 @@ export default function CobradorPage() {
         </>
       )}
 
-      {/* ── MODAL HOJA DE PAGOS ── */}
+      {/* ── MODAL PERFIL / HOJA DE PAGOS ── */}
       {detalleCliente && (() => {
         const credito = detalleCliente._credito;
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const perfil = detalleCliente.profiles || {};
 
         const cronograma = [...(credito.pagos_diarios || [])]
           .sort((a: any, b: any) => a.numero_dia - b.numero_dia)
@@ -994,9 +996,7 @@ export default function CobradorPage() {
               fecha: f.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }),
               pagado: !!pago.pagado,
               atrasado: !pago.pagado && f < hoy && !esHoy,
-              esHoy,
-              parcial,
-              montoPagado,
+              esHoy, parcial, montoPagado,
               mora: Number(pago.mora) || 0,
             };
           });
@@ -1006,13 +1006,13 @@ export default function CobradorPage() {
         const total      = cronograma.length;
         const atrasados  = cronograma.filter(p => p.atrasado && !p.parcial).length;
         const porcentaje = total > 0 ? Math.round((pagados / total) * 100) : 0;
+        const iniciales  = perfil.nombre_completo
+          ? perfil.nombre_completo.trim().split(/\s+/).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
+          : '?';
 
         return (
           <>
-            <div
-              className="fixed inset-0 z-[110] bg-black/50 backdrop-blur-sm"
-              onClick={() => setDetalleCliente(null)}
-            />
+            <div className="fixed inset-0 z-[110] bg-black/50 backdrop-blur-sm" onClick={() => setDetalleCliente(null)} />
             <div
               className="fixed inset-x-0 bottom-0 z-[111] bg-white rounded-t-3xl flex flex-col overflow-hidden"
               style={{ maxHeight: '92vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -1022,15 +1022,17 @@ export default function CobradorPage() {
                 <div className="w-10 h-1 bg-gray-300 rounded-full" />
               </div>
 
-              {/* Header */}
-              <div className="px-5 pt-1 pb-4 shrink-0 border-b border-gray-100">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <p className="text-[10px] text-gray-400 font-mono uppercase tracking-wider">#{detalleCliente.numero_cliente}</p>
-                    <h3 className="text-lg font-bold text-gray-900 leading-tight">{detalleCliente.profiles?.nombre_completo}</h3>
-                    {detalleCliente.direccion && (
-                      <p className="text-xs text-gray-400 mt-0.5">{detalleCliente.direccion}</p>
-                    )}
+              {/* Header compacto */}
+              <div className="px-5 pt-1 pb-3 shrink-0 border-b border-gray-100">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-black text-sm shrink-0">
+                      {iniciales}
+                    </div>
+                    <div>
+                      <p className="text-gray-900 font-bold text-base leading-tight">{perfil.nombre_completo}</p>
+                      <p className="text-gray-400 text-[10px] font-mono">#{detalleCliente.numero_cliente}</p>
+                    </div>
                   </div>
                   <button
                     onClick={() => setDetalleCliente(null)}
@@ -1040,107 +1042,186 @@ export default function CobradorPage() {
                   </button>
                 </div>
 
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Cuota</p>
-                    <p className="text-sm font-bold text-red-600">${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Total</p>
-                    <p className="text-sm font-bold text-gray-900">${Math.round((credito.monto_total || 0) + (credito.interes_total || 0)).toLocaleString('es-MX')}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Avance</p>
-                    <p className="text-sm font-bold text-emerald-600">{porcentaje}%</p>
-                  </div>
-                </div>
-
-                {/* Barra progreso */}
-                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-1.5">
-                  <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-                    style={{ width: `${porcentaje}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-gray-400">
-                  <span className="text-emerald-600 font-medium">{pagados} pagados{parciales > 0 ? <span className="text-amber-600"> · {parciales} con abono</span> : ''}</span>
-                  <span>{total - pagados - parciales} pendientes{atrasados > 0 ? <span className="text-red-500 font-medium"> · {atrasados} atrasados</span> : ''}</span>
+                {/* Tabs */}
+                <div className="flex gap-2 mt-3">
+                  {(['perfil', 'pagos'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTabDetalle(t)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
+                        tabDetalle === t
+                          ? t === 'perfil' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {t === 'perfil' ? <><i className="fa-solid fa-user mr-1.5" />Perfil</> : <><i className="fa-solid fa-calendar-days mr-1.5" />Hoja de pagos</>}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Cronograma */}
-              <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
-                {cronograma.map((item) => (
-                  <div
-                    key={item.numero}
-                    className={`flex items-center gap-3 px-5 py-2.5 ${
-                      item.pagado   ? 'bg-emerald-50/50' :
-                      item.parcial  ? 'bg-amber-50/60' :
-                      item.atrasado ? 'bg-red-50/50' :
-                      item.esHoy    ? 'bg-blue-50/50' : ''
-                    }`}
-                  >
-                    {/* Indicador */}
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${
-                      item.pagado   ? 'border-emerald-400 bg-emerald-100 text-emerald-700' :
-                      item.parcial  ? 'border-amber-400 bg-amber-100 text-amber-700' :
-                      item.atrasado ? 'border-red-400 bg-red-100 text-red-700' :
-                      item.esHoy    ? 'border-blue-400 bg-blue-100 text-blue-700' :
-                                      'border-gray-200 bg-white text-gray-400'
-                    }`}>
-                      {item.pagado  ? <i className="fa-solid fa-check text-[10px]" /> :
-                       item.parcial ? <i className="fa-solid fa-coins text-[10px]" /> :
-                       item.atrasado ? '!' : item.numero}
-                    </div>
+              {/* ── TAB PERFIL ── */}
+              {tabDetalle === 'perfil' && (
+                <div className="flex-1 overflow-y-auto">
+                  {/* Datos de contacto */}
+                  <div className="px-5 pt-4 pb-2">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-3">Datos de contacto</p>
+                    <div className="space-y-2">
+                      {perfil.telefono && (
+                        <a
+                          href={`tel:${perfil.telefono}`}
+                          className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 active:bg-gray-100 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-phone text-emerald-600 text-sm" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] text-gray-400 uppercase">Teléfono</p>
+                            <p className="text-gray-900 font-semibold text-sm">{perfil.telefono}</p>
+                          </div>
+                          <i className="fa-solid fa-chevron-right text-gray-300 text-xs" />
+                        </a>
+                      )}
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className={`text-xs font-semibold ${
-                          item.pagado   ? 'text-emerald-700' :
-                          item.parcial  ? 'text-amber-700' :
-                          item.atrasado ? 'text-red-700' :
-                          item.esHoy    ? 'text-blue-700' : 'text-gray-700'
-                        }`}>
-                          Pago {item.numero}
-                        </p>
-                        {item.esHoy && (
-                          <span className="text-[9px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">HOY</span>
-                        )}
-                        {item.parcial && (
-                          <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ABONO PARCIAL</span>
-                        )}
-                        {item.atrasado && !item.parcial && (
-                          <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">ATRASADO</span>
-                        )}
-                        {item.mora > 0 && (
-                          <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">+${item.mora} mora</span>
-                        )}
-                      </div>
-                      <p className={`text-[10px] ${item.atrasado && !item.parcial ? 'text-red-400' : 'text-gray-400'}`}>{item.fecha}</p>
-                    </div>
+                      {perfil.email && (
+                        <a
+                          href={`mailto:${perfil.email}`}
+                          className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 active:bg-gray-100 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-envelope text-blue-600 text-sm" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] text-gray-400 uppercase">Correo</p>
+                            <p className="text-gray-900 font-semibold text-sm truncate">{perfil.email}</p>
+                          </div>
+                          <i className="fa-solid fa-chevron-right text-gray-300 text-xs" />
+                        </a>
+                      )}
 
-                    {/* Monto */}
-                    <div className="text-right shrink-0">
-                      {item.parcial ? (
-                        <>
-                          <p className="text-sm font-bold text-amber-600">${item.montoPagado.toLocaleString('es-MX')}</p>
-                          <p className="text-[10px] text-gray-400">de ${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
-                        </>
-                      ) : (
-                        <p className={`text-sm font-bold ${
-                          item.pagado   ? 'text-emerald-600' :
-                          item.atrasado ? 'text-red-500' :
-                          item.esHoy    ? 'text-blue-600' : 'text-gray-600'
-                        }`}>
-                          ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
-                        </p>
+                      {detalleCliente.direccion && (
+                        <a
+                          href={`https://maps.google.com/?q=${encodeURIComponent(detalleCliente.direccion)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 active:bg-gray-100 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-location-dot text-red-500 text-sm" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] text-gray-400 uppercase">Dirección</p>
+                            <p className="text-gray-900 font-semibold text-sm leading-snug">{detalleCliente.direccion}</p>
+                          </div>
+                          <i className="fa-solid fa-chevron-right text-gray-300 text-xs" />
+                        </a>
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Datos del crédito */}
+                  <div className="px-5 pt-4 pb-6">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-3">Crédito activo</p>
+                    <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase">Cuota</p>
+                          <p className="text-base font-black text-red-600">${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase">Capital</p>
+                          <p className="text-base font-black text-gray-900">${(credito.monto_total || 0).toLocaleString('es-MX')}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase">Pagos</p>
+                          <p className="text-base font-black text-gray-900">{total}</p>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-200">
+                        <div className="flex justify-between text-[10px] text-gray-400 mb-1.5">
+                          <span>{pagados} de {total} pagos</span>
+                          <span className="font-bold text-emerald-600">{porcentaje}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
+                            style={{ width: `${porcentaje}%` }}
+                          />
+                        </div>
+                        {atrasados > 0 && (
+                          <p className="text-red-500 text-[10px] font-bold mt-1.5">
+                            <i className="fa-solid fa-triangle-exclamation mr-1" />{atrasados} pago{atrasados !== 1 ? 's' : ''} atrasado{atrasados !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                        {parciales > 0 && (
+                          <p className="text-amber-500 text-[10px] font-bold mt-0.5">
+                            <i className="fa-solid fa-coins mr-1" />{parciales} con abono parcial
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TAB PAGOS ── */}
+              {tabDetalle === 'pagos' && (
+                <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+                  {cronograma.map((item) => (
+                    <div
+                      key={item.numero}
+                      className={`flex items-center gap-3 px-5 py-2.5 ${
+                        item.pagado   ? 'bg-emerald-50/50' :
+                        item.parcial  ? 'bg-amber-50/60' :
+                        item.atrasado ? 'bg-red-50/50' :
+                        item.esHoy    ? 'bg-blue-50/50' : ''
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${
+                        item.pagado   ? 'border-emerald-400 bg-emerald-100 text-emerald-700' :
+                        item.parcial  ? 'border-amber-400 bg-amber-100 text-amber-700' :
+                        item.atrasado ? 'border-red-400 bg-red-100 text-red-700' :
+                        item.esHoy    ? 'border-blue-400 bg-blue-100 text-blue-700' :
+                                        'border-gray-200 bg-white text-gray-400'
+                      }`}>
+                        {item.pagado  ? <i className="fa-solid fa-check text-[10px]" /> :
+                         item.parcial ? <i className="fa-solid fa-coins text-[10px]" /> :
+                         item.atrasado ? '!' : item.numero}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-xs font-semibold ${
+                            item.pagado   ? 'text-emerald-700' :
+                            item.parcial  ? 'text-amber-700' :
+                            item.atrasado ? 'text-red-700' :
+                            item.esHoy    ? 'text-blue-700' : 'text-gray-700'
+                          }`}>Pago {item.numero}</p>
+                          {item.esHoy    && <span className="text-[9px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">HOY</span>}
+                          {item.parcial  && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ABONO PARCIAL</span>}
+                          {item.atrasado && !item.parcial && <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">ATRASADO</span>}
+                          {item.mora > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">+${item.mora} mora</span>}
+                        </div>
+                        <p className={`text-[10px] ${item.atrasado && !item.parcial ? 'text-red-400' : 'text-gray-400'}`}>{item.fecha}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {item.parcial ? (
+                          <>
+                            <p className="text-sm font-bold text-amber-600">${item.montoPagado.toLocaleString('es-MX')}</p>
+                            <p className="text-[10px] text-gray-400">de ${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                          </>
+                        ) : (
+                          <p className={`text-sm font-bold ${
+                            item.pagado   ? 'text-emerald-600' :
+                            item.atrasado ? 'text-red-500' :
+                            item.esHoy    ? 'text-blue-600' : 'text-gray-600'
+                          }`}>${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         );
