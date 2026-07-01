@@ -26,7 +26,7 @@ export default function CreditosActivos({ searchQuery }: { searchQuery: string }
         .select(`
           id, monto_total, monto_diario, semanas_autorizadas,
           tasa_interes_porcentaje, estado, fecha_inicio,
-          pagos_diarios(id, pagado, fecha_esperada, mora),
+          pagos_diarios(id, pagado, fecha_esperada, mora, monto_pagado),
           clientes(numero_cliente, cobrador_asignado_id, profiles(nombre_completo))
         `)
         .in('estado', ['activo', 'atrasado'])
@@ -59,16 +59,21 @@ export default function CreditosActivos({ searchQuery }: { searchQuery: string }
 
   const enriquecidos = useMemo(() => creditos.map((c: any) => {
     const pagos: any[] = c.pagos_diarios || [];
+    const cuota = Math.round(c.monto_diario || 0);
     const pagados = pagos.filter((p: any) => p.pagado).length;
     const total = pagos.length;
     const progreso = total > 0 ? Math.round((pagados / total) * 100) : 0;
     const atrasados = pagos.filter((p: any) => !p.pagado && p.fecha_esperada < hoy).length;
     const mora = atrasados * MORA_DIA;
-    const saldo = (total - pagados) * Math.round(c.monto_diario || 0);
+    const abonoParcial = pagos
+      .filter((p: any) => !p.pagado && (Number(p.monto_pagado) || 0) > 0)
+      .reduce((s: number, p: any) => s + (Number(p.monto_pagado) || 0), 0);
+    const totalAbonado = pagados * cuota + abonoParcial;
+    const saldo = Math.max(0, total * cuota - totalAbonado);
     const nombre = c.clientes?.profiles?.nombre_completo || '—';
     const numero = c.clientes?.numero_cliente || '—';
     const cobrador = profiles[c.clientes?.cobrador_asignado_id] || '—';
-    return { ...c, _pagados: pagados, _total: total, _progreso: progreso, _mora: mora, _saldo: saldo, _nombre: nombre, _numero: numero, _cobrador: cobrador };
+    return { ...c, _pagados: pagados, _total: total, _progreso: progreso, _mora: mora, _abonoParcial: abonoParcial, _totalAbonado: totalAbonado, _saldo: saldo, _nombre: nombre, _numero: numero, _cobrador: cobrador };
   }), [creditos, profiles, hoy]);
 
   const filtrados = useMemo(() => {
@@ -93,7 +98,7 @@ export default function CreditosActivos({ searchQuery }: { searchQuery: string }
   // Resumen global
   const totalCapital   = enriquecidos.reduce((s, c) => s + c.monto_total, 0);
   const totalSaldo     = enriquecidos.reduce((s, c) => s + c._saldo, 0);
-  const totalCobrado   = enriquecidos.reduce((s, c) => s + c._pagados * Math.round(c.monto_diario || 0), 0);
+  const totalCobrado   = enriquecidos.reduce((s, c) => s + c._totalAbonado, 0);
   const totalMora      = enriquecidos.reduce((s, c) => s + c._mora, 0);
   const enAtrasoCnt    = enriquecidos.filter((c) => c._mora > 0).length;
 
@@ -205,8 +210,11 @@ export default function CreditosActivos({ searchQuery }: { searchQuery: string }
                   <p className="text-white text-xs font-bold">${c.monto_total.toLocaleString('es-MX')}</p>
                 </div>
                 <div>
-                  <p className="text-emerald-500 text-[9px] uppercase">Cobrado</p>
-                  <p className="text-emerald-400 text-xs font-bold">${(c._pagados * Math.round(c.monto_diario)).toLocaleString('es-MX')}</p>
+                  <p className="text-emerald-500 text-[9px] uppercase">Abonado</p>
+                  <p className="text-emerald-400 text-xs font-bold">${c._totalAbonado.toLocaleString('es-MX')}</p>
+                  {c._abonoParcial > 0 && (
+                    <p className="text-amber-400 text-[9px] mt-0.5">+${c._abonoParcial.toLocaleString('es-MX')} parcial</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-gray-500 text-[9px] uppercase">Saldo</p>
