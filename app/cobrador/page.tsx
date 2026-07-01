@@ -382,7 +382,7 @@ export default function CobradorPage() {
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    window.location.href = '/login';
   };
 
   // ────────────────────────────────────────────
