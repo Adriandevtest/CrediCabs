@@ -33,6 +33,15 @@ export default function EquipoPage() {
   const [clientesAsignados, setClientesAsignados] = useState<any[]>([]);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
 
+  // ── Progreso del día ──
+  const [progresoModal, setProgresoModal] = useState<{
+    cobrador: any;
+    loading: boolean;
+    total: number;
+    cobrados: number;
+    clientes: { nombre: string; numero: string; cobrado: boolean; monto: number }[];
+  } | null>(null);
+
   const fetchEquipo = async () => {
     setLoading(true);
     try {
@@ -103,6 +112,56 @@ export default function EquipoPage() {
       }
     } else {
       setClientesAsignados([]);
+    }
+  };
+
+  const verProgreso = async (miembro: any) => {
+    setProgresoModal({ cobrador: miembro, loading: true, total: 0, cobrados: 0, clientes: [] });
+    const today = new Date().toLocaleDateString('en-CA');
+    try {
+      const { data } = await supabase
+        .from('clientes')
+        .select(`
+          id, numero_cliente,
+          profiles(nombre_completo),
+          creditos(id, monto_diario, estado,
+            pagos_diarios(id, pagado, fecha_esperada)
+          )
+        `)
+        .eq('cobrador_asignado_id', miembro.id);
+
+      const filas: { nombre: string; numero: string; cobrado: boolean; monto: number }[] = [];
+
+      (data || []).forEach((cliente: any) => {
+        const creditosActivos = (cliente.creditos || []).filter((c: any) => c.estado !== 'liquidado');
+        creditosActivos.forEach((credito: any) => {
+          const vencidos = (credito.pagos_diarios || []).filter(
+            (p: any) => p.fecha_esperada <= today
+          );
+          if (vencidos.length === 0) return;
+          const cobrado = vencidos.every((p: any) => p.pagado);
+          filas.push({
+            nombre: (cliente.profiles as any)?.nombre_completo || '—',
+            numero: cliente.numero_cliente || '—',
+            cobrado,
+            monto: Math.round(credito.monto_diario || 0),
+          });
+        });
+      });
+
+      const cobrados = filas.filter(f => f.cobrado).length;
+      // Ordenar: pendientes primero, luego cobrados
+      filas.sort((a, b) => Number(a.cobrado) - Number(b.cobrado));
+
+      setProgresoModal({
+        cobrador: miembro,
+        loading: false,
+        total: filas.length,
+        cobrados,
+        clientes: filas,
+      });
+    } catch {
+      setProgresoModal(null);
     }
   };
 
@@ -212,6 +271,15 @@ export default function EquipoPage() {
                     >
                       Ver Datos y Accesos
                     </button>
+                    {miembro.rol === 'cobrador' && (
+                      <button
+                        onClick={() => verProgreso(miembro)}
+                        className="w-full bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <i className="fa-solid fa-chart-simple text-[10px]" />
+                        Ver progreso del día
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -360,6 +428,127 @@ export default function EquipoPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── MODAL PROGRESO DEL DÍA ── */}
+      {progresoModal && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            onClick={() => setProgresoModal(null)}
+          />
+          <div
+            className="fixed inset-x-0 bottom-0 z-[51] md:inset-0 md:flex md:items-center md:justify-center"
+            onClick={() => setProgresoModal(null)}
+          >
+            <div
+              className="bg-gray-950 border border-gray-800 w-full md:max-w-sm rounded-t-3xl md:rounded-2xl flex flex-col"
+              style={{ maxHeight: '85dvh' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Handle móvil */}
+              <div className="flex justify-center pt-3 pb-1 md:hidden shrink-0">
+                <div className="w-10 h-1 bg-gray-700 rounded-full" />
+              </div>
+
+              {/* Header */}
+              <div className="px-5 pt-3 pb-4 border-b border-gray-800 shrink-0">
+                <div className="flex justify-between items-start mb-1">
+                  <div>
+                    <p className="text-gray-500 text-[10px] uppercase tracking-widest">Progreso del día</p>
+                    <h3 className="text-white font-black text-base leading-tight">
+                      {progresoModal.cobrador.nombre_completo}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setProgresoModal(null)}
+                    className="text-gray-500 hover:text-white text-xl leading-none ml-3 shrink-0"
+                  >
+                    &times;
+                  </button>
+                </div>
+
+                {progresoModal.loading ? (
+                  <div className="flex items-center gap-2 mt-3">
+                    <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-gray-400 text-xs">Cargando...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Contador */}
+                    <div className="flex items-end gap-1.5 mt-3 mb-2">
+                      <span className="text-3xl font-black text-yellow-400">{progresoModal.cobrados}</span>
+                      <span className="text-gray-500 text-sm mb-1">de {progresoModal.total} clientes cobrados</span>
+                    </div>
+
+                    {/* Barra de progreso */}
+                    <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          progresoModal.total > 0 && progresoModal.cobrados === progresoModal.total
+                            ? 'bg-emerald-500'
+                            : 'bg-yellow-400'
+                        }`}
+                        style={{
+                          width: progresoModal.total > 0
+                            ? `${Math.round((progresoModal.cobrados / progresoModal.total) * 100)}%`
+                            : '0%'
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-gray-600 text-[10px]">
+                        {progresoModal.total - progresoModal.cobrados} pendientes
+                      </span>
+                      <span className={`text-[10px] font-bold ${
+                        progresoModal.total > 0 && progresoModal.cobrados === progresoModal.total
+                          ? 'text-emerald-400'
+                          : 'text-yellow-400'
+                      }`}>
+                        {progresoModal.total > 0
+                          ? `${Math.round((progresoModal.cobrados / progresoModal.total) * 100)}%`
+                          : '—'}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Lista de clientes */}
+              {!progresoModal.loading && (
+                <div className="overflow-y-auto flex-1 min-h-0 divide-y divide-gray-800/60">
+                  {progresoModal.clientes.length === 0 ? (
+                    <p className="text-center text-gray-500 text-sm py-8">Sin clientes en ruta hoy</p>
+                  ) : (
+                    progresoModal.clientes.map((c, i) => (
+                      <div key={i} className={`flex items-center gap-3 px-5 py-3 ${c.cobrado ? 'bg-emerald-950/20' : ''}`}>
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                          c.cobrado
+                            ? 'bg-emerald-500'
+                            : 'bg-gray-800 border border-gray-700'
+                        }`}>
+                          {c.cobrado
+                            ? <i className="fa-solid fa-check text-white text-[10px]" />
+                            : <i className="fa-solid fa-clock text-gray-500 text-[10px]" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-semibold truncate ${c.cobrado ? 'text-emerald-300' : 'text-white'}`}>
+                            {c.nombre}
+                          </p>
+                          <p className="text-gray-500 text-[10px]">#{c.numero}</p>
+                        </div>
+                        <p className={`text-sm font-bold shrink-0 ${c.cobrado ? 'text-emerald-400' : 'text-gray-500'}`}>
+                          {c.cobrado ? '+' : ''}${c.monto.toLocaleString('es-MX')}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <AdminPinModal
         open={pinDespedirOpen}
