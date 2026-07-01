@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ClientTable from '../components/ClientTable';
@@ -36,9 +36,15 @@ export default function Home() {
   const [montoIngreso, setMontoIngreso] = useState('');
   const router = useRouter();
 
+  // Ref para que el handler de realtime siempre llame la versión más reciente
+  const cargarRef = useRef<() => Promise<void>>(async () => {});
+
   const hoy = new Date();
   const fechaHoy = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
   const fechaHoyLabel = hoy.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  // Mantener ref actualizado tras cada render para evitar closures estancadas en realtime
+  useEffect(() => { cargarRef.current = cargarDatosDashboard; });
 
   useEffect(() => {
     verificarAccesoYDatos();
@@ -46,14 +52,15 @@ export default function Home() {
     const channel = supabase
       .channel('admin-dashboard-rt')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, (payload) => {
-        if ((payload.new as any)?.pagado) {
+        const pago = payload.new as any;
+        if (pago?.pagado) {
           setCapitalFlash(true);
           setTimeout(() => setCapitalFlash(false), 1500);
         }
-        cargarDatosDashboard();
+        cargarRef.current();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'creditos' }, () => {
-        cargarDatosDashboard();
+        cargarRef.current();
       })
       .subscribe();
 
@@ -63,7 +70,7 @@ export default function Home() {
       .on('broadcast', { event: 'pago_aprobado' }, () => {
         setCapitalFlash(true);
         setTimeout(() => setCapitalFlash(false), 1500);
-        cargarDatosDashboard();
+        cargarRef.current();
       })
       .subscribe();
 
