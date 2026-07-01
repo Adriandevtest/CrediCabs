@@ -24,6 +24,8 @@ export default function Home() {
   const [totalMoraHoy, setTotalMoraHoy] = useState(0);
   const [metaHoy, setMetaHoy] = useState(0);
   const [totalPagosEsperados, setTotalPagosEsperados] = useState(0);
+  const [abonosParciales, setAbonosParciales] = useState<any[]>([]);
+  const [totalAbonoParcial, setTotalAbonoParcial] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [capitalFlash, setCapitalFlash] = useState(false);
@@ -107,14 +109,17 @@ export default function Home() {
       // 2. Créditos activos → Capital pendiente (saldo real por cobrar), Clientes, ROI
       const { data: creditosData } = await supabase
         .from('creditos')
-        .select('monto_total, monto_diario, interes_total, pagos_diarios(pagado)')
+        .select('monto_total, monto_diario, interes_total, pagos_diarios(pagado, monto_pagado)')
         .or('estado.eq.activo,estado.is.null,estado.eq.atrasado');
 
       if (creditosData) {
-        // Capital pendiente = suma de pagos sin cobrar × cuota diaria
+        // Capital pendiente = suma de pagos sin cobrar × cuota − abonos parciales ya registrados
         const totalCapital = (creditosData as any[]).reduce((s, c) => {
-          const pendientes = (c.pagos_diarios || []).filter((p: any) => !p.pagado).length;
-          return s + pendientes * Number(c.monto_diario || 0);
+          const pagos = c.pagos_diarios || [];
+          const cuota = Number(c.monto_diario || 0);
+          const pendientes = pagos.filter((p: any) => !p.pagado).length;
+          const abonado = pagos.filter((p: any) => !p.pagado).reduce((a: number, p: any) => a + (Number(p.monto_pagado) || 0), 0);
+          return s + Math.max(0, pendientes * cuota - abonado);
         }, 0);
 
         // Meta del día: todos los pagos esperados hoy
@@ -205,6 +210,43 @@ export default function Home() {
         const totalMora = corteFinal.reduce((s, p) => s + Number(p.mora || 0), 0);
         setTotalCobradoHoy(Math.round(totalCuotas));
         setTotalMoraHoy(Math.round(totalMora));
+      }
+
+      // 4. Abonos parciales pendientes (pagos no completados con monto > 0)
+      const { data: abonosData } = await supabase
+        .from('pagos_diarios')
+        .select(`
+          id, fecha_esperada, monto_pagado, numero_dia,
+          creditos (
+            monto_diario,
+            clientes (
+              numero_cliente,
+              cobrador_asignado_id,
+              profiles ( nombre_completo )
+            )
+          )
+        `)
+        .eq('pagado', false)
+        .gt('monto_pagado', 0)
+        .order('fecha_esperada', { ascending: true });
+
+      if (abonosData) {
+        // Obtener nombres de cobradores para abonos
+        const cobIdsAbonos = [...new Set(
+          (abonosData as any[]).map((p: any) => p.creditos?.clientes?.cobrador_asignado_id).filter(Boolean)
+        )] as string[];
+        let cobMapAbonos: Record<string, string> = {};
+        if (cobIdsAbonos.length) {
+          const { data: cobProfs } = await supabase
+            .from('profiles').select('id, nombre_completo').in('id', cobIdsAbonos);
+          cobMapAbonos = Object.fromEntries((cobProfs || []).map((c: any) => [c.id, c.nombre_completo]));
+        }
+        const abonosFinal = (abonosData as any[]).map((p: any) => ({
+          ...p,
+          _cobrador: cobMapAbonos[p.creditos?.clientes?.cobrador_asignado_id] || 'Sin asignar',
+        }));
+        setAbonosParciales(abonosFinal);
+        setTotalAbonoParcial(Math.round(abonosFinal.reduce((s, p) => s + Number(p.monto_pagado || 0), 0)));
       }
     } catch (error) {
       console.error('Error cargando dashboard:', error);
@@ -674,6 +716,98 @@ export default function Home() {
             </>
           )}
         </div>
+
+        {/* Abonos Parciales Pendientes */}
+        {abonosParciales.length > 0 && (
+          <div className="bg-gray-900 border border-amber-900/40 rounded-2xl overflow-hidden mb-8">
+            <div className="px-4 md:px-6 py-4 border-b border-amber-900/30 bg-gray-950 flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <h2 className="text-white font-bold text-lg">Abonos Parciales</h2>
+                  <span className="text-[10px] text-amber-400 bg-amber-900/30 border border-amber-800/40 px-2 py-0.5 rounded-full font-bold">
+                    {abonosParciales.length} pendiente{abonosParciales.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <p className="text-gray-500 text-xs mt-0.5">Pagos con abono incompleto — falta cobrar el saldo</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-amber-400 font-black text-lg">${totalAbonoParcial.toLocaleString('es-MX')}</p>
+                <p className="text-gray-500 text-[10px]">total abonado</p>
+              </div>
+            </div>
+
+            {/* Tabla escritorio */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-[10px] text-gray-500 uppercase tracking-wider border-b border-gray-800">
+                    <th className="px-6 py-3 font-medium">Cliente</th>
+                    <th className="px-6 py-3 font-medium">No. Cliente</th>
+                    <th className="px-6 py-3 font-medium">Cobrador</th>
+                    <th className="px-6 py-3 font-medium text-center">Pago</th>
+                    <th className="px-6 py-3 font-medium text-right">Abonado</th>
+                    <th className="px-6 py-3 font-medium text-right">Resta</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800/60">
+                  {abonosParciales.map((p, i) => {
+                    const cliente = p.creditos?.clientes;
+                    const cuota = Number(p.creditos?.monto_diario || 0);
+                    const abonado = Number(p.monto_pagado || 0);
+                    const resta = Math.max(0, cuota - abonado);
+                    return (
+                      <tr key={p.id} className={`hover:bg-gray-800/40 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-800/20'}`}>
+                        <td className="px-6 py-3 text-white font-medium">{cliente?.profiles?.nombre_completo || '—'}</td>
+                        <td className="px-6 py-3 text-yellow-500 font-mono text-xs">{cliente?.numero_cliente || '—'}</td>
+                        <td className="px-6 py-3 text-gray-400 text-xs">{p._cobrador}</td>
+                        <td className="px-6 py-3 text-center">
+                          <span className="text-[11px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">
+                            {p.numero_dia} · {p.fecha_esperada}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-right text-amber-400 font-bold">
+                          ${abonado.toLocaleString('es-MX')}
+                        </td>
+                        <td className="px-6 py-3 text-right text-gray-300 font-bold">
+                          ${resta.toLocaleString('es-MX')} <span className="text-gray-600 text-[10px] font-normal">de ${Math.round(cuota).toLocaleString('es-MX')}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Lista móvil */}
+            <div className="md:hidden divide-y divide-gray-800/60">
+              {abonosParciales.map((p) => {
+                const cliente = p.creditos?.clientes;
+                const cuota = Number(p.creditos?.monto_diario || 0);
+                const abonado = Number(p.monto_pagado || 0);
+                const resta = Math.max(0, cuota - abonado);
+                return (
+                  <div key={p.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{cliente?.profiles?.nombre_completo || '—'}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-yellow-500 font-mono text-[10px]">{cliente?.numero_cliente}</span>
+                        <span className="text-gray-600 text-[10px]">·</span>
+                        <span className="text-gray-500 text-[10px]">Pago {p.numero_dia} · {p.fecha_esperada}</span>
+                        <span className="text-gray-600 text-[10px]">·</span>
+                        <span className="text-gray-400 text-[10px] truncate">{p._cobrador}</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-amber-400 font-bold text-sm">${abonado.toLocaleString('es-MX')} abonado</p>
+                      <p className="text-gray-400 text-[10px]">Resta ${resta.toLocaleString('es-MX')} de ${Math.round(cuota).toLocaleString('es-MX')}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Exportar / Importar Excel — solo PC */}
         <div className="mb-4">
