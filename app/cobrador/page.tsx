@@ -928,18 +928,24 @@ export default function CobradorPage() {
           .map((pago: any) => {
             const f = new Date(pago.fecha_esperada + 'T00:00:00'); f.setHours(0, 0, 0, 0);
             const esHoy = f.getTime() === hoy.getTime();
+            const montoPagado = Number(pago.monto_pagado) || 0;
+            const parcial = !pago.pagado && montoPagado > 0;
             return {
               numero: pago.numero_dia,
               fecha: f.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }),
               pagado: !!pago.pagado,
               atrasado: !pago.pagado && f < hoy && !esHoy,
               esHoy,
+              parcial,
+              montoPagado,
+              mora: Number(pago.mora) || 0,
             };
           });
 
-        const pagados   = cronograma.filter(p => p.pagado).length;
-        const total     = cronograma.length;
-        const atrasados = cronograma.filter(p => p.atrasado).length;
+        const pagados    = cronograma.filter(p => p.pagado).length;
+        const parciales  = cronograma.filter(p => p.parcial).length;
+        const total      = cronograma.length;
+        const atrasados  = cronograma.filter(p => p.atrasado && !p.parcial).length;
         const porcentaje = total > 0 ? Math.round((pagados / total) * 100) : 0;
 
         return (
@@ -999,8 +1005,8 @@ export default function CobradorPage() {
                   />
                 </div>
                 <div className="flex justify-between text-[10px] text-gray-400">
-                  <span className="text-emerald-600 font-medium">{pagados} pagados</span>
-                  <span>{total - pagados} pendientes{atrasados > 0 ? <span className="text-red-500 font-medium"> · {atrasados} atrasados</span> : ''}</span>
+                  <span className="text-emerald-600 font-medium">{pagados} pagados{parciales > 0 ? <span className="text-amber-600"> · {parciales} con abono</span> : ''}</span>
+                  <span>{total - pagados - parciales} pendientes{atrasados > 0 ? <span className="text-red-500 font-medium"> · {atrasados} atrasados</span> : ''}</span>
                 </div>
               </div>
 
@@ -1011,6 +1017,7 @@ export default function CobradorPage() {
                     key={item.numero}
                     className={`flex items-center gap-3 px-5 py-2.5 ${
                       item.pagado   ? 'bg-emerald-50/50' :
+                      item.parcial  ? 'bg-amber-50/60' :
                       item.atrasado ? 'bg-red-50/50' :
                       item.esHoy    ? 'bg-blue-50/50' : ''
                     }`}
@@ -1018,18 +1025,22 @@ export default function CobradorPage() {
                     {/* Indicador */}
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${
                       item.pagado   ? 'border-emerald-400 bg-emerald-100 text-emerald-700' :
+                      item.parcial  ? 'border-amber-400 bg-amber-100 text-amber-700' :
                       item.atrasado ? 'border-red-400 bg-red-100 text-red-700' :
                       item.esHoy    ? 'border-blue-400 bg-blue-100 text-blue-700' :
                                       'border-gray-200 bg-white text-gray-400'
                     }`}>
-                      {item.pagado ? <i className="fa-solid fa-check text-[10px]" /> : item.atrasado ? '!' : item.numero}
+                      {item.pagado  ? <i className="fa-solid fa-check text-[10px]" /> :
+                       item.parcial ? <i className="fa-solid fa-coins text-[10px]" /> :
+                       item.atrasado ? '!' : item.numero}
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className={`text-xs font-semibold ${
                           item.pagado   ? 'text-emerald-700' :
+                          item.parcial  ? 'text-amber-700' :
                           item.atrasado ? 'text-red-700' :
                           item.esHoy    ? 'text-blue-700' : 'text-gray-700'
                         }`}>
@@ -1038,21 +1049,36 @@ export default function CobradorPage() {
                         {item.esHoy && (
                           <span className="text-[9px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">HOY</span>
                         )}
-                        {item.atrasado && (
+                        {item.parcial && (
+                          <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ABONO PARCIAL</span>
+                        )}
+                        {item.atrasado && !item.parcial && (
                           <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">ATRASADO</span>
                         )}
+                        {item.mora > 0 && (
+                          <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">+${item.mora} mora</span>
+                        )}
                       </div>
-                      <p className={`text-[10px] ${item.atrasado ? 'text-red-400' : 'text-gray-400'}`}>{item.fecha}</p>
+                      <p className={`text-[10px] ${item.atrasado && !item.parcial ? 'text-red-400' : 'text-gray-400'}`}>{item.fecha}</p>
                     </div>
 
                     {/* Monto */}
-                    <p className={`text-sm font-bold shrink-0 ${
-                      item.pagado   ? 'text-emerald-600' :
-                      item.atrasado ? 'text-red-500' :
-                      item.esHoy    ? 'text-blue-600' : 'text-gray-600'
-                    }`}>
-                      ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
-                    </p>
+                    <div className="text-right shrink-0">
+                      {item.parcial ? (
+                        <>
+                          <p className="text-sm font-bold text-amber-600">${item.montoPagado.toLocaleString('es-MX')}</p>
+                          <p className="text-[10px] text-gray-400">de ${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                        </>
+                      ) : (
+                        <p className={`text-sm font-bold ${
+                          item.pagado   ? 'text-emerald-600' :
+                          item.atrasado ? 'text-red-500' :
+                          item.esHoy    ? 'text-blue-600' : 'text-gray-600'
+                        }`}>
+                          ${Math.round(credito.monto_diario).toLocaleString('es-MX')}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
