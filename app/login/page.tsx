@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -15,22 +15,50 @@ export default function LoginPage() {
   const [isNative, setIsNative] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
+  const [showBioSetup, setShowBioSetup] = useState(false);
+
+  const lastEmailRef = useRef('');
+  const lastPassRef = useRef('');
+
   const router = useRouter();
 
   useEffect(() => {
-    const checkNative = async () => {
+    const init = async () => {
       try {
         const { Capacitor } = await import('@capacitor/core');
-        setIsNative(Capacitor.isNativePlatform());
+        if (!Capacitor.isNativePlatform()) return;
+        setIsNative(true);
+
+        const { isBiometricAvailable, isBiometricEnabled } = await import('../../lib/biometric');
+        const available = await isBiometricAvailable();
+        setBioAvailable(available);
+        if (available) {
+          const enabled = await isBiometricEnabled();
+          setBioEnabled(enabled);
+        }
       } catch {
-        setIsNative(false);
+        /* web — ignore */
       }
     };
-    checkNative();
+    init();
   }, []);
 
-  const handleSignIn = async () => {
-    if (!email || !password) {
+  const redirectByRole = (rol: string | undefined) => {
+    if (rol === 'cobrador') return router.push('/cobrador');
+    if (rol === 'supervisor') return router.push('/supervisor');
+    if (rol === 'cliente') return router.push('/panel-cliente');
+    return router.push('/');
+  };
+
+  const handleSignIn = async (overrideEmail?: string, overridePass?: string) => {
+    const rawEmail = overrideEmail ?? email;
+    const rawPass = overridePass ?? password;
+
+    if (!rawEmail || !rawPass) {
       setErrorMsg('Por favor ingresa tu ID (o correo) y contraseña.');
       return;
     }
@@ -39,12 +67,11 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      // Sin @ → número de cliente (CLI-XXXX); construir email automáticamente
-      const emailAuth = email.includes('@') ? email : `${email}@credicabs.com`;
+      const emailAuth = rawEmail.includes('@') ? rawEmail : `${rawEmail}@credicabs.com`;
 
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: emailAuth,
-        password,
+        password: rawPass,
       });
 
       if (authError) throw new Error('Credenciales incorrectas.');
@@ -55,14 +82,61 @@ export default function LoginPage() {
         .eq('id', authData.user.id)
         .single();
 
-      if (profile?.rol === 'cobrador') return router.push('/cobrador');
-      if (profile?.rol === 'supervisor') return router.push('/supervisor');
-      if (profile?.rol === 'cliente') return router.push('/panel-cliente');
-      return router.push('/');
+      // Ofrecer activar huella si está disponible y no configurada aún
+      if (isNative && bioAvailable && !bioEnabled && !overrideEmail) {
+        lastEmailRef.current = rawEmail;
+        lastPassRef.current = rawPass;
+        setShowBioSetup(true);
+        setLoading(false);
+        // Guardamos rol para redirigir después del prompt
+        lastEmailRef.current = rawEmail;
+        lastPassRef.current = rawPass;
+        // Redirigimos después del prompt de huella
+        setTimeout(() => redirectByRole(profile?.rol), 200);
+        return;
+      }
+
+      redirectByRole(profile?.rol);
     } catch {
       setErrorMsg('Acceso denegado. Verifica tu ID o contraseña.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    if (bioLoading) return;
+    setBioLoading(true);
+    setErrorMsg('');
+    try {
+      const { promptBiometric, getBiometricCredentials } = await import('../../lib/biometric');
+      const ok = await promptBiometric();
+      if (!ok) {
+        setErrorMsg('Autenticación biométrica cancelada.');
+        return;
+      }
+      const creds = await getBiometricCredentials();
+      if (!creds) {
+        setErrorMsg('No hay credenciales guardadas. Inicia sesión manualmente.');
+        return;
+      }
+      await handleSignIn(creds.email, creds.password);
+    } catch {
+      setErrorMsg('Error al verificar huella. Intenta con tu contraseña.');
+    } finally {
+      setBioLoading(false);
+    }
+  };
+
+  const activarHuella = async () => {
+    try {
+      const { saveBiometricCredentials } = await import('../../lib/biometric');
+      await saveBiometricCredentials(lastEmailRef.current, lastPassRef.current);
+      setBioEnabled(true);
+    } catch {
+      /* silencioso */
+    } finally {
+      setShowBioSetup(false);
     }
   };
 
@@ -122,7 +196,6 @@ export default function LoginPage() {
           transition={{ duration: 0.5, delay: 0.1 }}
         >
           <div className="relative mb-5">
-            {/* Red glow ring */}
             <div
               className="absolute inset-0 rounded-full"
               style={{
@@ -267,7 +340,7 @@ export default function LoginPage() {
 
           {/* Login button */}
           <button
-            onClick={handleSignIn}
+            onClick={() => handleSignIn()}
             disabled={loading}
             className="w-full py-4 rounded-2xl font-bold text-white text-sm tracking-[2px] uppercase transition-all active:scale-[0.97] disabled:opacity-60"
             style={{
@@ -302,8 +375,8 @@ export default function LoginPage() {
           ¿Olvidaste tu contraseña?
         </motion.button>
 
-        {/* Biometric — native mobile only */}
-        {isNative && (
+        {/* Biometric — native mobile only, available */}
+        {isNative && bioAvailable && (
           <motion.div
             className="mt-7 flex flex-col items-center gap-3"
             initial={{ opacity: 0, y: 8 }}
@@ -313,29 +386,49 @@ export default function LoginPage() {
             <div className="flex items-center gap-3 w-40">
               <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
               <span className="text-xs" style={{ color: 'rgba(255,255,255,0.28)', whiteSpace: 'nowrap' }}>
-                o accede con
+                {bioEnabled ? 'acceso rápido' : 'o accede con'}
               </span>
               <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
             </div>
 
             <button
-              className="flex flex-col items-center gap-2 group"
+              onClick={handleBiometricLogin}
+              disabled={bioLoading || !bioEnabled}
+              className="flex flex-col items-center gap-2 group disabled:opacity-40"
               aria-label="Acceso biométrico"
             >
               <div
                 className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-90 group-hover:scale-105"
                 style={{
-                  background: 'rgba(244,176,0,0.06)',
-                  border: '1.5px solid rgba(244,176,0,0.3)',
-                  boxShadow: '0 0 24px rgba(244,176,0,0.12)',
+                  background: bioEnabled ? 'rgba(244,176,0,0.10)' : 'rgba(255,255,255,0.04)',
+                  border: `1.5px solid ${bioEnabled ? 'rgba(244,176,0,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                  boxShadow: bioEnabled ? '0 0 24px rgba(244,176,0,0.18)' : 'none',
                 }}
               >
-                <i className="fa-solid fa-fingerprint text-3xl" style={{ color: '#F4B000' }} />
+                {bioLoading
+                  ? <i className="fa-solid fa-circle-notch fa-spin text-2xl" style={{ color: '#F4B000' }} />
+                  : <i className="fa-solid fa-fingerprint text-3xl" style={{ color: bioEnabled ? '#F4B000' : 'rgba(255,255,255,0.3)' }} />
+                }
               </div>
-              <span className="text-xs font-medium" style={{ color: 'rgba(244,176,0,0.7)' }}>
-                Huella digital
+              <span className="text-xs font-medium" style={{ color: bioEnabled ? 'rgba(244,176,0,0.8)' : 'rgba(255,255,255,0.3)' }}>
+                {bioEnabled ? 'Huella digital' : 'No configurada'}
               </span>
             </button>
+
+            {/* Opción para desactivar si ya está activa */}
+            {bioEnabled && (
+              <button
+                onClick={async () => {
+                  const { clearBiometricCredentials } = await import('../../lib/biometric');
+                  await clearBiometricCredentials();
+                  setBioEnabled(false);
+                }}
+                className="text-xs mt-1 transition-opacity hover:opacity-70"
+                style={{ color: 'rgba(255,255,255,0.2)' }}
+              >
+                Desactivar huella
+              </button>
+            )}
           </motion.div>
         )}
 
@@ -350,6 +443,62 @@ export default function LoginPage() {
           © 2025 Credi Cab's · Todos los derechos reservados
         </motion.p>
       </motion.div>
+
+      {/* ── Modal: ¿Activar huella? ── */}
+      {showBioSetup && (
+        <div className="fixed inset-0 flex items-end justify-center" style={{ zIndex: 200 }}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowBioSetup(false)} />
+          <motion.div
+            className="relative w-full rounded-t-3xl p-6 pb-10 flex flex-col items-center gap-4"
+            style={{
+              background: 'linear-gradient(160deg, #111 0%, #1a1a1a 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              maxWidth: 480,
+            }}
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          >
+            {/* Handle */}
+            <div className="w-12 h-1.5 rounded-full bg-gray-700 mb-2" />
+
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(244,176,0,0.1)', border: '1.5px solid rgba(244,176,0,0.35)' }}
+            >
+              <i className="fa-solid fa-fingerprint text-3xl" style={{ color: '#F4B000' }} />
+            </div>
+
+            <div className="text-center">
+              <p className="text-white font-bold text-lg">Activar huella digital</p>
+              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                La próxima vez podrás entrar solo con tu huella, sin escribir tu contraseña.
+              </p>
+            </div>
+
+            <button
+              onClick={activarHuella}
+              className="w-full py-4 rounded-2xl font-bold text-sm uppercase tracking-widest"
+              style={{
+                background: 'linear-gradient(135deg, #F4B000 0%, #c48a00 100%)',
+                color: '#000',
+                boxShadow: '0 0 24px rgba(244,176,0,0.3)',
+              }}
+            >
+              <i className="fa-solid fa-fingerprint mr-2" />
+              Activar huella
+            </button>
+
+            <button
+              onClick={() => setShowBioSetup(false)}
+              className="text-sm font-medium transition-opacity hover:opacity-70"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+            >
+              Ahora no
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
