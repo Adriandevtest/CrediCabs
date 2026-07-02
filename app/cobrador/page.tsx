@@ -382,8 +382,8 @@ export default function CobradorPage() {
     }
   };
 
-  const cerrarSesion = async () => {
-    await supabase.auth.signOut();
+  const cerrarSesion = () => {
+    supabase.auth.signOut();
     window.location.href = '/login';
   };
 
