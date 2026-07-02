@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { MORA_POR_DIA } from '../../lib/mora';
 import UserNav from '../../components/UserNav';
 import GeoTracker from '../../components/GeoTracker';
+import BottomSheet from '../../components/BottomSheet';
 
 type GpsEstado = 'inactivo' | 'activo' | 'error' | 'sin_soporte';
 type Tab = 'ruta' | 'historial' | 'mapa' | 'perfil';
@@ -939,16 +940,14 @@ export default function CobradorPage() {
 
       {/* ── CONFIRMACIÓN DE PAGO / MORA ── */}
       {confirmacion && (
-        <>
-          <div
-            className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm"
-            onClick={() => setConfirmacion(null)}
-          />
-          <div
-            className="fixed inset-x-0 bottom-0 z-[121] bg-white rounded-t-3xl px-5 pt-4 pb-6"
-            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
-          >
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+        <BottomSheet
+          onClose={() => setConfirmacion(null)}
+          overlayBg="bg-black/60 backdrop-blur-sm"
+          overlayZ={120}
+          sheetZ={121}
+          maxHeight="70dvh"
+        >
+          <div className="px-5 pb-6">
             <p className="text-center text-gray-400 text-[11px] uppercase tracking-widest mb-1">
               {confirmacion.tipo === 'pago' ? '¿Registrar pago?' : '¿Registrar mora?'}
             </p>
@@ -975,7 +974,7 @@ export default function CobradorPage() {
               </button>
             </div>
           </div>
-        </>
+        </BottomSheet>
       )}
 
       {/* ── MODAL PERFIL / HOJA DE PAGOS ── */}
@@ -1011,16 +1010,7 @@ export default function CobradorPage() {
           : '?';
 
         return (
-          <>
-            <div className="fixed inset-0 z-[110] bg-black/50 backdrop-blur-sm" onClick={() => setDetalleCliente(null)} />
-            <div
-              className="fixed inset-x-0 bottom-0 z-[111] bg-white rounded-t-3xl flex flex-col overflow-hidden"
-              style={{ maxHeight: '92vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
-            >
-              {/* Handle */}
-              <div className="flex justify-center pt-3 pb-1 shrink-0">
-                <div className="w-10 h-1 bg-gray-300 rounded-full" />
-              </div>
+          <BottomSheet onClose={() => setDetalleCliente(null)} overlayZ={110} sheetZ={111} maxHeight="92dvh">
 
               {/* Header compacto */}
               <div className="px-5 pt-1 pb-3 shrink-0 border-b border-gray-100">
@@ -1222,8 +1212,7 @@ export default function CobradorPage() {
                   ))}
                 </div>
               )}
-            </div>
-          </>
+          </BottomSheet>
         );
       })()}
 

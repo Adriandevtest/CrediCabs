@@ -34,6 +34,30 @@ export default function EquipoPage() {
   const [showPasswordReset, setShowPasswordReset] = useState(false);
 
   // ── Progreso del día ──
+  const progresoSheetRef = useRef<HTMLDivElement>(null);
+  const progresoY0 = useRef(0);
+  const progresoSwipe = {
+    onTouchStart: (e: React.TouchEvent) => {
+      progresoY0.current = e.touches[0].clientY;
+      if (progresoSheetRef.current) progresoSheetRef.current.style.transition = 'none';
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      const d = e.touches[0].clientY - progresoY0.current;
+      if (d > 0 && progresoSheetRef.current) progresoSheetRef.current.style.transform = `translateY(${d}px)`;
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const d = e.changedTouches[0].clientY - progresoY0.current;
+      if (!progresoSheetRef.current) return;
+      progresoSheetRef.current.style.transition = 'transform 0.25s ease';
+      if (d > 80) {
+        progresoSheetRef.current.style.transform = 'translateY(110%)';
+        setTimeout(() => setProgresoModal(null), 230);
+      } else {
+        progresoSheetRef.current.style.transform = 'translateY(0)';
+      }
+    },
+  };
+
   const [progresoModal, setProgresoModal] = useState<{
     cobrador: any;
     loading: boolean;
@@ -441,12 +465,16 @@ export default function EquipoPage() {
             onClick={() => setProgresoModal(null)}
           >
             <div
+              ref={progresoSheetRef}
               className="bg-gray-950 border border-gray-800 w-full md:max-w-sm rounded-t-3xl md:rounded-2xl flex flex-col"
               style={{ maxHeight: '85dvh' }}
               onClick={e => e.stopPropagation()}
             >
-              {/* Handle móvil */}
-              <div className="flex justify-center pt-3 pb-1 md:hidden shrink-0">
+              {/* Handle móvil — swipe para cerrar */}
+              <div
+                className="flex justify-center pt-3 pb-1 md:hidden shrink-0 touch-none select-none"
+                {...progresoSwipe}
+              >
                 <div className="w-10 h-1 bg-gray-700 rounded-full" />
               </div>
 
