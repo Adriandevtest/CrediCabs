@@ -23,6 +23,7 @@ export default function LoginPage() {
 
   const lastEmailRef = useRef('');
   const lastPassRef = useRef('');
+  const pendingRolRef = useRef<string | undefined>(undefined);
 
   const router = useRouter();
 
@@ -86,13 +87,9 @@ export default function LoginPage() {
       if (isNative && bioAvailable && !bioEnabled && !overrideEmail) {
         lastEmailRef.current = rawEmail;
         lastPassRef.current = rawPass;
+        pendingRolRef.current = profile?.rol;
         setShowBioSetup(true);
         setLoading(false);
-        // Guardamos rol para redirigir después del prompt
-        lastEmailRef.current = rawEmail;
-        lastPassRef.current = rawPass;
-        // Redirigimos después del prompt de huella
-        setTimeout(() => redirectByRole(profile?.rol), 200);
         return;
       }
 
@@ -137,6 +134,7 @@ export default function LoginPage() {
       /* silencioso */
     } finally {
       setShowBioSetup(false);
+      redirectByRole(pendingRolRef.current);
     }
   };
 
@@ -447,7 +445,13 @@ export default function LoginPage() {
       {/* ── Modal: ¿Activar huella? ── */}
       {showBioSetup && (
         <div className="fixed inset-0 flex items-end justify-center" style={{ zIndex: 200 }}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowBioSetup(false)} />
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setShowBioSetup(false);
+              redirectByRole(pendingRolRef.current);
+            }}
+          />
           <motion.div
             className="relative w-full rounded-t-3xl p-6 pb-10 flex flex-col items-center gap-4"
             style={{
@@ -490,7 +494,10 @@ export default function LoginPage() {
             </button>
 
             <button
-              onClick={() => setShowBioSetup(false)}
+              onClick={() => {
+                setShowBioSetup(false);
+                redirectByRole(pendingRolRef.current);
+              }}
               className="text-sm font-medium transition-opacity hover:opacity-70"
               style={{ color: 'rgba(255,255,255,0.35)' }}
             >
