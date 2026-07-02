@@ -22,20 +22,29 @@ export default function BottomSheet({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const y0 = useRef(0);
+  const moved = useRef(false);
 
   const onStart = (e: React.TouchEvent) => {
     y0.current = e.touches[0].clientY;
+    moved.current = false;
     if (ref.current) ref.current.style.transition = 'none';
   };
+
   const onMove = (e: React.TouchEvent) => {
     const d = e.touches[0].clientY - y0.current;
-    if (d > 0 && ref.current) ref.current.style.transform = `translateY(${d}px)`;
+    if (d > 0 && ref.current) {
+      moved.current = true;
+      ref.current.style.transform = `translateY(${d}px)`;
+    }
   };
+
   const onEnd = (e: React.TouchEvent) => {
     const d = e.changedTouches[0].clientY - y0.current;
     if (!ref.current) return;
     ref.current.style.transition = 'transform 0.25s ease';
-    if (d > 80) {
+
+    // Tap en el handle (sin deslizar) o swipe > 80px → cerrar
+    if (!moved.current || d > 80) {
       ref.current.style.transform = 'translateY(110%)';
       setTimeout(onClose, 230);
     } else {
@@ -54,15 +63,17 @@ export default function BottomSheet({
         ref={ref}
         className={`fixed inset-x-0 bottom-0 rounded-t-3xl flex flex-col overflow-hidden ${bg}`}
         style={{ maxHeight, zIndex: sheetZ, paddingBottom: 'env(safe-area-inset-bottom)' }}
+        onClick={e => e.stopPropagation()}
       >
-        {/* Handle — zona de deslizamiento */}
+        {/* Handle — toca o desliza hacia abajo para cerrar */}
         <div
-          className="flex justify-center pt-3 pb-2 shrink-0 touch-none select-none"
+          className="flex justify-center pt-3 pb-2 shrink-0 touch-none select-none cursor-pointer"
           onTouchStart={onStart}
           onTouchMove={onMove}
           onTouchEnd={onEnd}
+          onClick={onClose}
         >
-          <div className={`w-10 h-1 rounded-full ${handleColor}`} />
+          <div className={`w-12 h-1.5 rounded-full ${handleColor}`} />
         </div>
         {children}
       </div>
