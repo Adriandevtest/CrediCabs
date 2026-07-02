@@ -1,13 +1,20 @@
 'use client';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+
+const RUTAS_PUBLICAS = ['/login', '/descargar', '/panel-cliente'];
 
 export function AuthRefreshHandler() {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
+    const esPublica = RUTAS_PUBLICAS.some(r => pathname.startsWith(r));
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (esPublica) return;
+
       if (event === 'SIGNED_OUT') {
         router.replace('/login');
       }
@@ -23,7 +30,7 @@ export function AuthRefreshHandler() {
     });
 
     return () => subscription.unsubscribe();
-  }, [router]);
+  }, [router, pathname]);
 
   return null;
 }
