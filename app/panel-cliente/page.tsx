@@ -211,7 +211,7 @@ export default function PanelCliente() {
     }
   };
 
-  const cerrarSesion = async () => { await supabase.auth.signOut(); router.push('/login'); };
+  const cerrarSesion = () => { supabase.auth.signOut(); window.location.href = '/login'; };
 
   const handleCambioPass = async () => {
     setErrorPass('');

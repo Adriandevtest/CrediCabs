@@ -85,9 +85,9 @@ export default function SupervisorPage() {
     }
   };
 
-  const cerrarSesion = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
+  const cerrarSesion = () => {
+    supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
   const gpsInfo: Record<GpsEstado, { label: string; color: string }> = {

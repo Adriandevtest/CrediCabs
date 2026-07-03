@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -22,7 +22,6 @@ const COBRADOR_TABS = [
 
 export default function MobileNav() {
   const pathname = usePathname();
-  const router = useRouter();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [activeHash, setActiveHash] = useState('');
@@ -122,11 +121,10 @@ export default function MobileNav() {
   const getIconClass = (path: string) =>
     `p-2 transition-all duration-300 ${pathname === path ? 'text-white scale-110 drop-shadow-lg' : 'text-black/60 hover:text-black'}`;
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     if (confirm('¿Deseas cerrar sesión?')) {
-      await supabase.auth.signOut();
-      router.push('/login');
-      router.refresh();
+      supabase.auth.signOut();
+      window.location.href = '/login';
     }
   };
 

@@ -30,7 +30,6 @@ async function compressImage(file: File): Promise<File> {
     reader.readAsDataURL(file);
   });
 }
-import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
 
 // Asegúrate de que estos componentes existan en tu carpeta components/ui
@@ -52,7 +51,6 @@ export default function UserNav() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [guardadoOk, setGuardadoOk] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
-  const router = useRouter();
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -70,10 +68,9 @@ export default function UserNav() {
     fetchUser();
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
+  const handleLogout = () => {
+    supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
   const getIniciales = (nombre: string) => {
