@@ -34,6 +34,9 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [loadingClientes, setLoadingClientes] = useState(true);
   const [errorClientes, setErrorClientes] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [eliminandoMasivo, setEliminandoMasivo] = useState(false);
+  const [pinEliminarMasivoOpen, setPinEliminarMasivoOpen] = useState(false);
 
   useEffect(() => {
     fetchClientes();
@@ -678,6 +681,65 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     return matchesStatus && matchesSearch;
   });
 
+  const toggleSeleccion = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const todosFiltradosSeleccionados = filteredClientes.length > 0 && filteredClientes.every((c) => selectedIds.has(c.id));
+  const algunFiltradoSeleccionado = filteredClientes.some((c) => selectedIds.has(c.id));
+
+  const toggleSeleccionarTodos = () => {
+    setSelectedIds((prev) => {
+      if (todosFiltradosSeleccionados) {
+        const next = new Set(prev);
+        for (const c of filteredClientes) next.delete(c.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const c of filteredClientes) next.add(c.id);
+      return next;
+    });
+  };
+
+  const eliminarSeleccionados = () => {
+    if (selectedIds.size === 0) return;
+    setPinEliminarMasivoOpen(true);
+  };
+
+  const confirmarEliminarMasivo = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    setEliminandoMasivo(true);
+    try {
+      const creditoIds = clientes
+        .filter((c) => selectedIds.has(c.id))
+        .flatMap((c) => (c.creditos || []).map((cr: any) => cr.id));
+
+      if (creditoIds.length > 0) {
+        const { error: errorPagos } = await supabase.from('pagos_diarios').delete().in('credito_id', creditoIds);
+        if (errorPagos) throw errorPagos;
+      }
+      const { error: errorCreditos } = await supabase.from('creditos').delete().in('cliente_id', ids);
+      if (errorCreditos) throw errorCreditos;
+      const { error: errorClientes } = await supabase.from('clientes').delete().in('id', ids);
+      if (errorClientes) throw errorClientes;
+
+      alert(`${ids.length} cliente${ids.length > 1 ? 's' : ''} eliminado${ids.length > 1 ? 's' : ''} correctamente.`);
+      setSelectedIds(new Set());
+      fetchClientes();
+    } catch (error) {
+      console.error('Error al eliminar clientes seleccionados:', error);
+      alert('Ocurrió un error al eliminar los clientes seleccionados.');
+    } finally {
+      setEliminandoMasivo(false);
+    }
+  };
+
   // Contenido del diálogo — responsive: scroll interno, header fijo, footer fijo
   const dialogContent = selectedUser ? (
     <DialogContent className="w-[calc(100vw-1rem)] sm:w-full max-w-2xl max-h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
@@ -1074,6 +1136,49 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
         onCancel={() => setPinEliminarOpen(false)}
       />
 
+      {/* PIN para eliminar clientes seleccionados */}
+      <AdminPinModal
+        open={pinEliminarMasivoOpen}
+        titulo="Eliminar Clientes"
+        descripcion={`¿Seguro que deseas eliminar ${selectedIds.size} cliente${selectedIds.size === 1 ? '' : 's'} seleccionado${selectedIds.size === 1 ? '' : 's'}? Esta acción no se puede deshacer.`}
+        onConfirm={() => { setPinEliminarMasivoOpen(false); confirmarEliminarMasivo(); }}
+        onCancel={() => setPinEliminarMasivoOpen(false)}
+      />
+
+      {/* ── Barra de selección múltiple ── */}
+      {!loadingClientes && filteredClientes.length > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-800 bg-gray-950/60">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <Checkbox
+              checked={todosFiltradosSeleccionados ? true : algunFiltradoSeleccionado ? 'indeterminate' : false}
+              onCheckedChange={toggleSeleccionarTodos}
+            />
+            <span className="text-xs text-gray-400 font-medium">
+              {selectedIds.size > 0 ? `${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}` : 'Seleccionar todos'}
+            </span>
+          </label>
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-gray-500 hover:text-gray-300 font-medium px-2"
+              >
+                Cancelar
+              </button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="text-xs h-8"
+                disabled={eliminandoMasivo}
+                onClick={eliminarSeleccionados}
+              >
+                {eliminandoMasivo ? 'Eliminando...' : `🗑 Eliminar (${selectedIds.size})`}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── MÓVIL: lista de tarjetas ── */}
       <div className="md:hidden divide-y divide-gray-800 max-h-[70vh] overflow-y-auto">
         {loadingClientes ? (
@@ -1094,6 +1199,11 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
           const cobrador = cobradores.find(c => c.id === cliente.cobrador_asignado_id)?.nombre_completo;
           return (
             <div key={cliente.id} className="flex items-center gap-3 p-4">
+              <Checkbox
+                checked={selectedIds.has(cliente.id)}
+                onCheckedChange={() => toggleSeleccion(cliente.id)}
+                className="shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-yellow-500 font-mono text-xs font-bold">{cliente.numero_cliente}</span>
@@ -1127,7 +1237,12 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
         <Table>
           <TableHeader className="sticky top-0 bg-gray-950 z-10 shadow-sm">
             <TableRow className="hover:bg-transparent border-gray-800">
-              <TableHead className="w-[50px]"><Checkbox /></TableHead>
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={todosFiltradosSeleccionados ? true : algunFiltradoSeleccionado ? 'indeterminate' : false}
+                  onCheckedChange={toggleSeleccionarTodos}
+                />
+              </TableHead>
               <TableHead>No. Cliente</TableHead>
               <TableHead>Nombre</TableHead>
               <TableHead>Crédito Total</TableHead>
@@ -1144,7 +1259,12 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
                 const estado = credito?.estado || 'activo';
                 return (
                   <TableRow key={cliente.numero_cliente}>
-                    <TableCell><Checkbox /></TableCell>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(cliente.id)}
+                        onCheckedChange={() => toggleSeleccion(cliente.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-bold text-yellow-500">{cliente.numero_cliente}</TableCell>
                     <TableCell className="text-white">{cliente.profiles?.nombre_completo || 'Sin nombre'}</TableCell>
                     <TableCell className="text-gray-300">{credito ? `$${credito.monto_total?.toLocaleString('es-MX')}` : '---'}</TableCell>
