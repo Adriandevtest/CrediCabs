@@ -20,6 +20,7 @@ const getIniciales = (nombre: string) => {
 export default function EquipoPage() {
   const [equipo, setEquipo] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filtroRol, setFiltroRol] = useState<'todos' | 'cobrador' | 'supervisor'>('todos');
   const [isModalOpen, setIsModalOpen] = useState(false); 
 
   // Estados para el Visor de Detalles y Seguridad
@@ -193,6 +194,8 @@ export default function EquipoPage() {
     fetchEquipo();
   }, []);
 
+  const equipoFiltrado = equipo.filter((m) => filtroRol === 'todos' || m.rol === filtroRol);
+
   return (
     <main className="min-h-screen bg-gray-950 pb-20 md:p-8">
       {/* Header móvil sticky — fuera del contenedor con padding */}
@@ -257,9 +260,31 @@ export default function EquipoPage() {
           </div>
 
           <div className="lg:col-span-2">
-            <div className="flex justify-between items-center mb-6 border-l-4 border-red-600 pl-3">
-              <h2 className="text-2xl font-bold text-white">Plantilla Activa</h2>
-              <span className="bg-gray-800 text-gray-300 text-xs px-3 py-1 rounded-full font-bold">{equipo.length}</span>
+            <div className="flex flex-col gap-4 mb-6 border-l-4 border-red-600 pl-3">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-white">Plantilla Activa</h2>
+                <span className="bg-gray-800 text-gray-300 text-xs px-3 py-1 rounded-full font-bold">{equipoFiltrado.length}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFiltroRol('todos')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors ${filtroRol === 'todos' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => setFiltroRol('cobrador')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors ${filtroRol === 'cobrador' ? 'bg-yellow-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  Cobradores
+                </button>
+                <button
+                  onClick={() => setFiltroRol('supervisor')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors ${filtroRol === 'supervisor' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  Asesores
+                </button>
+              </div>
             </div>
 
             {loading ? (
@@ -268,7 +293,9 @@ export default function EquipoPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {equipo.map((miembro) => (
+                {equipoFiltrado.length === 0 ? (
+                  <p className="text-gray-500 text-sm md:col-span-2 text-center py-8">Sin resultados para este filtro.</p>
+                ) : equipoFiltrado.map((miembro) => (
                   <div key={miembro.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-yellow-500 transition-colors flex flex-col gap-3 shadow-lg">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-full overflow-hidden border-2 shrink-0 ${miembro.rol === 'supervisor' ? 'border-red-700' : 'border-yellow-700'}`}>
