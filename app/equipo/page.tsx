@@ -282,7 +282,7 @@ export default function EquipoPage() {
                   onClick={() => setFiltroRol('supervisor')}
                   className={`px-4 py-1.5 rounded-full text-xs font-black transition-colors ${filtroRol === 'supervisor' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                 >
-                  Asesores
+                  Supervisores
                 </button>
               </div>
             </div>

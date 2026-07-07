@@ -358,6 +358,18 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       });
     } catch {}
 
+    // 1b. Imagen de marca de agua como data URL
+    let wmDataUrl = '';
+    try {
+      const res = await fetch('/Tarjetadepago.jpg');
+      const blob = await res.blob();
+      wmDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch {}
+
     // 2. Pagos diarios via API (service role bypassa RLS)
     const creditoIds = (selectedUser.creditos || []).map((c: any) => c.id).filter(Boolean);
     const pagosPorCredito: Record<string, any[]> = {};
@@ -493,9 +505,8 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11.5px; color: #111; background: #fff; }
 
     /* ── Marca de agua ── */
-    .wm { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-40deg);
-      font-size: 110px; font-weight: 900; color: #dc2626; opacity: .03; pointer-events: none;
-      z-index: 0; white-space: nowrap; letter-spacing: -2px; }
+    .wm { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 480px; max-width: 65%; height: auto; opacity: .08; pointer-events: none; z-index: 0; }
 
     .doc { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; }
 
@@ -583,7 +594,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 </head>
 <body>
   <button class="btn-c" onclick="window.close()">✕ Cerrar</button>
-  <div class="wm">CrediCabs</div>
+  ${wmDataUrl ? `<img src="${wmDataUrl}" class="wm" alt="" />` : ''}
 
   <div class="doc">
 
