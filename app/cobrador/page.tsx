@@ -47,6 +47,7 @@ export default function CobradorPage() {
 
   // ── Pago parcial / mora independiente ──
   const [montosInput, setMontosInput] = useState<Record<string, string>>({});
+  const [montosMoraInput, setMontosMoraInput] = useState<Record<string, string>>({});
   const [pagandoMora, setPagandoMora] = useState<string | null>(null);
 
   // ── Confirmación de acciones ──
@@ -341,28 +342,43 @@ export default function CobradorPage() {
     }
   };
 
-  const cobrarMora = async (creditoId: string) => {
+  const cobrarMora = async (creditoId: string, montoMora: number) => {
+    if (montoMora <= 0) { alert('Ingresa un monto de mora válido.'); return; }
     setPagandoMora(creditoId);
     try {
       const { data: atrasados, error } = await supabase
         .from('pagos_diarios')
-        .select('id, mora')
+        .select('id, mora, fecha_esperada')
         .eq('credito_id', creditoId)
         .eq('pagado', false)
-        .lt('fecha_esperada', today);
+        .lt('fecha_esperada', today)
+        .order('fecha_esperada', { ascending: true });
 
       if (error) throw error;
 
-      const sinMora = (atrasados || []).filter((p) => !p.mora);
-      if (sinMora.length === 0) { alert('No hay mora pendiente de cobrar.'); return; }
+      const pendientes = (atrasados || []).filter((p) => (Number(p.mora) || 0) < MORA_POR_DIA);
+      if (pendientes.length === 0) { alert('No hay mora pendiente de cobrar.'); return; }
 
-      const { error: upErr } = await supabase
-        .from('pagos_diarios')
-        .update({ mora: MORA_POR_DIA })
-        .in('id', sinMora.map((p) => p.id));
-      if (upErr) throw upErr;
+      let montoRestante = montoMora;
+      const actualizados = new Map<string, number>();
 
-      const idsActualizados = new Set(sinMora.map((p) => p.id));
+      for (const pago of pendientes) {
+        if (montoRestante <= 0) break;
+        const yaAbonado = Number(pago.mora) || 0;
+        const pendienteEste = MORA_POR_DIA - yaAbonado;
+        const abono = Math.min(montoRestante, pendienteEste);
+        const nuevoMora = yaAbonado + abono;
+
+        const { error: upErr } = await supabase
+          .from('pagos_diarios')
+          .update({ mora: nuevoMora })
+          .eq('id', pago.id);
+        if (upErr) throw upErr;
+
+        actualizados.set(pago.id, nuevoMora);
+        montoRestante -= abono;
+      }
+
       setRuta((prev) => prev.map((c) => {
         if (c._creditoId !== creditoId) return c;
         return {
@@ -370,11 +386,13 @@ export default function CobradorPage() {
           _credito: {
             ...c._credito,
             pagos_diarios: (c._credito.pagos_diarios || []).map((p: any) =>
-              idsActualizados.has(p.id) ? { ...p, mora: MORA_POR_DIA } : p
+              actualizados.has(p.id) ? { ...p, mora: actualizados.get(p.id) } : p
             ),
           },
         };
       }));
+
+      setMontosMoraInput((prev) => { const n = { ...prev }; delete n[creditoId]; return n; });
     } catch (e: any) {
       alert('Error al cobrar mora: ' + e.message);
     } finally {
@@ -396,7 +414,8 @@ export default function CobradorPage() {
   const morasPendientes = ruta.reduce((a, c) => {
     const pagos = c._credito?.pagos_diarios || [];
     const atrasados = pagos.filter((p: any) => !p.pagado && p.fecha_esperada < today);
-    return a + atrasados.filter((p: any) => !p.mora).length * MORA_POR_DIA;
+    const abonado = atrasados.reduce((s: number, p: any) => s + (Number(p.mora) || 0), 0);
+    return a + Math.max(0, atrasados.length * MORA_POR_DIA - abonado);
   }, 0);
   const progreso = ruta.length + completados.length > 0
     ? Math.round((completados.length / (ruta.length + completados.length)) * 100)
@@ -514,7 +533,8 @@ export default function CobradorPage() {
                         const totalCuotas = Math.round(credito.monto_diario) * diasPagar;
                         const yaAbonado = pagosVencidos.reduce((s: number, p: any) => s + (Number(p.monto_pagado) || 0), 0);
                         const cuotaPendiente = Math.max(0, totalCuotas - yaAbonado);
-                        const moraPendiente = pagosAtrasadosLocales.filter((p: any) => !p.mora).length * MORA_POR_DIA;
+                        const moraYaAbonada = pagosAtrasadosLocales.reduce((s: number, p: any) => s + (Number(p.mora) || 0), 0);
+                        const moraPendiente = Math.max(0, pagosAtrasadosLocales.length * MORA_POR_DIA - moraYaAbonada);
 
                         const pagosOrdenados = [...(credito.pagos_diarios || [])].sort(
                           (a: any, b: any) => a.numero_dia - b.numero_dia
@@ -592,12 +612,39 @@ export default function CobradorPage() {
                               {moraPendiente > 0 && (
                                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-red-100">
                                   <p className="text-xs text-red-500 uppercase tracking-wider font-bold">
-                                    Mora ({pagosAtrasadosLocales.filter((p: any) => !p.mora).length} × $50) — cobrar aparte
+                                    Mora ({pagosAtrasadosLocales.length} día{pagosAtrasadosLocales.length === 1 ? '' : 's'} atrasado{pagosAtrasadosLocales.length === 1 ? '' : 's'}) — cobrar aparte
                                   </p>
                                   <p className="text-sm font-bold text-red-600">+${moraPendiente.toLocaleString('es-MX')}</p>
                                 </div>
                               )}
                             </div>
+
+                            {/* Input de monto de mora */}
+                            {moraPendiente > 0 && (
+                              <div className="mb-3">
+                                <label className="text-[10px] text-red-500 uppercase tracking-wider mb-1 block">Monto de mora a cobrar</label>
+                                <div className="flex items-center bg-white border border-red-200 rounded-xl overflow-hidden">
+                                  <span className="pl-3 text-red-400 text-sm font-medium">$</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    className="flex-1 px-2 py-2.5 bg-transparent text-gray-900 font-semibold text-sm outline-none"
+                                    value={montosMoraInput[cliente._creditoId] !== undefined ? montosMoraInput[cliente._creditoId] : moraPendiente}
+                                    onChange={(e) => setMontosMoraInput((prev) => ({ ...prev, [cliente._creditoId]: e.target.value }))}
+                                  />
+                                  {montosMoraInput[cliente._creditoId] !== undefined && Number(montosMoraInput[cliente._creditoId]) !== moraPendiente && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setMontosMoraInput((prev) => ({ ...prev, [cliente._creditoId]: String(moraPendiente) }))}
+                                      className="px-2.5 py-2 text-[10px] text-red-600 font-bold border-l border-red-200 whitespace-nowrap"
+                                    >
+                                      Total
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Input de monto recibido */}
                             <div className="mb-3">
@@ -645,18 +692,22 @@ export default function CobradorPage() {
                             <div className="flex flex-col gap-2">
                               {moraPendiente > 0 && (
                                 <button
-                                  onClick={() => setConfirmacion({
-                                    tipo: 'mora',
-                                    clienteNombre: cliente.profiles?.nombre_completo || '',
-                                    monto: moraPendiente,
-                                    onConfirmar: () => { setConfirmacion(null); cobrarMora(cliente._creditoId); },
-                                  })}
+                                  onClick={() => {
+                                    const inputStr = montosMoraInput[cliente._creditoId];
+                                    const monto = inputStr !== undefined && inputStr !== '' ? Number(inputStr) : moraPendiente;
+                                    setConfirmacion({
+                                      tipo: 'mora',
+                                      clienteNombre: cliente.profiles?.nombre_completo || '',
+                                      monto,
+                                      onConfirmar: () => { setConfirmacion(null); cobrarMora(cliente._creditoId, monto); },
+                                    });
+                                  }}
                                   disabled={pagandoMora === cliente._creditoId}
                                   className="w-full border-2 border-red-300 text-red-600 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:bg-red-50 disabled:opacity-50 transition-colors"
                                 >
                                   {pagandoMora === cliente._creditoId
                                     ? 'Registrando mora...'
-                                    : `Cobrar mora +$${moraPendiente.toLocaleString('es-MX')}`}
+                                    : 'Cobrar mora'}
                                 </button>
                               )}
                               <button
