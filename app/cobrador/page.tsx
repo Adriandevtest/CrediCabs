@@ -430,35 +430,35 @@ export default function CobradorPage() {
   const fechasHistorial = Object.keys(historialPorFecha).sort((a, b) => b.localeCompare(a));
 
   const gpsInfo: Record<GpsEstado, { label: string; color: string; bg: string }> = {
-    activo: { label: 'GPS activo — ubicación en vivo', color: 'text-blue-600', bg: 'bg-blue-50' },
-    inactivo: { label: 'Iniciando GPS...', color: 'text-gray-500', bg: 'bg-gray-50' },
-    error: { label: 'No se pudo obtener ubicación', color: 'text-red-600', bg: 'bg-red-50' },
-    sin_soporte: { label: 'GPS no disponible en este dispositivo', color: 'text-gray-500', bg: 'bg-gray-50' },
+    activo: { label: 'GPS activo — ubicación en vivo', color: 'text-blue-400', bg: 'bg-blue-950/30' },
+    inactivo: { label: 'Iniciando GPS...', color: 'text-gray-500', bg: 'bg-gray-800/60' },
+    error: { label: 'No se pudo obtener ubicación', color: 'text-red-400', bg: 'bg-red-950/30' },
+    sin_soporte: { label: 'GPS no disponible en este dispositivo', color: 'text-gray-500', bg: 'bg-gray-800/60' },
   };
 
   // ────────────────────────────────────────────
   // Render
   // ────────────────────────────────────────────
   return (
-    <main className="min-h-screen pb-20 bg-gray-50">
+    <main className="min-h-screen pb-20 bg-gray-950">
 
       {/* GeoTracker invisible — sólo rastrea */}
       {userId && <GeoTracker userId={userId} onStatusChange={setGpsEstado} />}
 
       {/* ── HEADER FIJO ── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-50 px-4 pt-4 pb-3">
+      <header className="bg-gray-950/95 backdrop-blur border-b border-gray-800 sticky top-0 z-50 px-4 pt-4 pb-3">
         <div className="flex justify-between items-center mb-3">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-medium text-gray-900">
-                Hola, <span className="text-red-600">{nombreCobrador || 'Cobrador'}</span>
+              <h1 className="text-lg font-medium text-white">
+                Hola, <span className="text-red-500">{nombreCobrador || 'Cobrador'}</span>
               </h1>
               <span
-                className={`w-2 h-2 rounded-full ${rtActivo ? 'bg-green-500' : 'bg-gray-300'}`}
+                className={`w-2 h-2 rounded-full ${rtActivo ? 'bg-green-500' : 'bg-gray-600'}`}
                 title={rtActivo ? 'Tiempo real activo' : 'Conectando...'}
               />
             </div>
-            <p className="text-xs text-gray-400 mt-0.5 capitalize">{fechaHoy} · Ruta del día</p>
+            <p className="text-xs text-gray-500 mt-0.5 capitalize">{fechaHoy} · Ruta del día</p>
           </div>
           <UserNav />
         </div>
@@ -466,14 +466,14 @@ export default function CobradorPage() {
         {/* Progreso — solo visible en tab Ruta */}
         {activeTab === 'ruta' && (
           <>
-            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
               <div className="h-full bg-red-600 rounded-full transition-all duration-500" style={{ width: `${progreso}%` }} />
             </div>
             <div className="flex justify-between mt-1.5">
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-500">
                 {completados.length} de {ruta.length + completados.length} cobros completados
               </span>
-              <span className="text-xs text-red-600 font-medium">{progreso}%</span>
+              <span className="text-xs text-red-500 font-medium">{progreso}%</span>
             </div>
           </>
         )}
@@ -487,35 +487,35 @@ export default function CobradorPage() {
           <>
             {/* Métricas */}
             <div className="grid grid-cols-3 gap-2 mb-5">
-              <div className="bg-white rounded-xl border border-gray-100 p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Meta</p>
-                <p className="text-lg font-semibold text-red-600">${Math.round(totalDia).toLocaleString('es-MX')}</p>
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Meta</p>
+                <p className="text-lg font-semibold text-red-500">${Math.round(totalDia).toLocaleString('es-MX')}</p>
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Cobrado</p>
-                <p className="text-lg font-semibold text-emerald-600">${Math.round(totalCobrado).toLocaleString('es-MX')}</p>
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Cobrado</p>
+                <p className="text-lg font-semibold text-emerald-400">${Math.round(totalCobrado).toLocaleString('es-MX')}</p>
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-3">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Pendiente</p>
-                <p className="text-lg font-semibold text-gray-900">${Math.round(totalPendiente + morasPendientes).toLocaleString('es-MX')}</p>
-                {morasPendientes > 0 && <p className="text-[9px] text-red-500 font-medium">+${morasPendientes} mora</p>}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Pendiente</p>
+                <p className="text-lg font-semibold text-white">${Math.round(totalPendiente + morasPendientes).toLocaleString('es-MX')}</p>
+                {morasPendientes > 0 && <p className="text-[9px] text-red-400 font-medium">+${morasPendientes} mora</p>}
               </div>
             </div>
 
             {loading ? (
-              <div className="text-center py-16 text-gray-400 text-sm">Cargando ruta...</div>
+              <div className="text-center py-16 text-gray-500 text-sm">Cargando ruta...</div>
             ) : ruta.length === 0 && completados.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-100 text-center py-12 px-6">
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 text-center py-12 px-6">
                 <p className="text-3xl mb-3">📭</p>
-                <h3 className="text-gray-800 font-medium">Sin clientes asignados</h3>
-                <p className="text-gray-400 text-sm mt-1">No tienes clientes en tu ruta.</p>
+                <h3 className="text-gray-300 font-medium">Sin clientes asignados</h3>
+                <p className="text-gray-500 text-sm mt-1">No tienes clientes en tu ruta.</p>
               </div>
             ) : (
               <>
                 {/* Pendientes */}
                 {ruta.length > 0 && (
                   <>
-                    <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-3">
                       Clientes pendientes ({ruta.length})
                     </p>
                     <div className="flex flex-col gap-3 mb-6">
@@ -546,34 +546,34 @@ export default function CobradorPage() {
                         return (
                           <div
                             key={cliente._entryKey}
-                            className={`bg-white rounded-2xl p-4 border ${atrasado ? 'border-red-200 bg-red-50/30' : 'border-gray-100'}`}
+                            className={`bg-gray-900 rounded-2xl p-4 border ${atrasado ? 'border-red-900/50 bg-red-950/20' : 'border-gray-800'}`}
                           >
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs text-gray-400 font-mono">#{cliente.numero_cliente}</span>
+                                  <span className="text-xs text-gray-500 font-mono">#{cliente.numero_cliente}</span>
                                   {cliente._multiCredito && (
-                                    <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">
+                                    <span className="text-[9px] bg-blue-900/30 text-blue-400 px-1.5 py-0.5 rounded-full font-bold">
                                       Crédito {cliente._creditoNumero}
                                     </span>
                                   )}
                                   {numeroPago && (
-                                    <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
+                                    <span className="text-[9px] bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded-full font-bold">
                                       Pago {numeroPago}/{totalPagos}
                                     </span>
                                   )}
                                 </div>
-                                <h3 className="text-base font-semibold text-gray-900 leading-tight mt-0.5 truncate">
+                                <h3 className="text-base font-semibold text-white leading-tight mt-0.5 truncate">
                                   {cliente.profiles?.nombre_completo}
                                 </h3>
                               </div>
                               <div className="flex items-center gap-2 ml-2 shrink-0">
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${atrasado ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${atrasado ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
                                   {atrasado ? '⚠ Atrasado' : '✓ Activo'}
                                 </span>
                                 <a
                                   href={`tel:${cliente.profiles?.telefono || ''}`}
-                                  className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-green-600 hover:border-green-300 transition-colors"
+                                  className="w-8 h-8 rounded-full border border-gray-700 flex items-center justify-center text-gray-500 hover:text-green-400 hover:border-green-700 transition-colors"
                                 >
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -585,7 +585,7 @@ export default function CobradorPage() {
 
                             {cliente.direccion && (
                               <div className="flex items-start gap-1.5 mb-3">
-                                <svg className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                     d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -595,26 +595,26 @@ export default function CobradorPage() {
                             )}
 
                             {/* Cuota */}
-                            <div className={`rounded-xl p-3 mb-3 ${moraPendiente > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                            <div className={`rounded-xl p-3 mb-3 ${moraPendiente > 0 ? 'bg-red-950/30 border border-red-900/50' : 'bg-gray-800/60'}`}>
                               <div className="flex justify-between items-center">
                                 <div>
-                                  <p className="text-xs text-gray-400 uppercase tracking-wider">
+                                  <p className="text-xs text-gray-500 uppercase tracking-wider">
                                     {diasPagar > 1 ? `${diasPagar} cuotas pendientes` : 'Cuota del día'}
                                   </p>
                                   {yaAbonado > 0 && (
-                                    <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                                    <p className="text-[10px] text-emerald-400 font-medium mt-0.5">
                                       Abonado ${yaAbonado.toLocaleString('es-MX')} · Resta ${cuotaPendiente.toLocaleString('es-MX')}
                                     </p>
                                   )}
                                 </div>
-                                <p className="text-xl font-semibold text-red-600">${cuotaPendiente.toLocaleString('es-MX')}</p>
+                                <p className="text-xl font-semibold text-red-500">${cuotaPendiente.toLocaleString('es-MX')}</p>
                               </div>
                               {moraPendiente > 0 && (
-                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-red-100">
-                                  <p className="text-xs text-red-500 uppercase tracking-wider font-bold">
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-red-900/40">
+                                  <p className="text-xs text-red-400 uppercase tracking-wider font-bold">
                                     Mora ({pagosAtrasadosLocales.length} día{pagosAtrasadosLocales.length === 1 ? '' : 's'} atrasado{pagosAtrasadosLocales.length === 1 ? '' : 's'}) — cobrar aparte
                                   </p>
-                                  <p className="text-sm font-bold text-red-600">+${moraPendiente.toLocaleString('es-MX')}</p>
+                                  <p className="text-sm font-bold text-red-500">+${moraPendiente.toLocaleString('es-MX')}</p>
                                 </div>
                               )}
                             </div>
@@ -622,14 +622,14 @@ export default function CobradorPage() {
                             {/* Input de monto de mora */}
                             {moraPendiente > 0 && (
                               <div className="mb-3">
-                                <label className="text-[10px] text-red-500 uppercase tracking-wider mb-1 block">Monto de mora a cobrar</label>
-                                <div className="flex items-center bg-white border border-red-200 rounded-xl overflow-hidden">
+                                <label className="text-[10px] text-red-400 uppercase tracking-wider mb-1 block">Monto de mora a cobrar</label>
+                                <div className="flex items-center bg-gray-800 border border-red-900/50 rounded-xl overflow-hidden">
                                   <span className="pl-3 text-red-400 text-sm font-medium">$</span>
                                   <input
                                     type="number"
                                     min="0"
                                     step="1"
-                                    className="flex-1 px-2 py-2.5 bg-transparent text-gray-900 font-semibold text-sm outline-none"
+                                    className="flex-1 px-2 py-2.5 bg-transparent text-white font-semibold text-sm outline-none"
                                     value={montosMoraInput[cliente._creditoId] !== undefined ? montosMoraInput[cliente._creditoId] : moraPendiente}
                                     onChange={(e) => setMontosMoraInput((prev) => ({ ...prev, [cliente._creditoId]: e.target.value }))}
                                   />
@@ -637,7 +637,7 @@ export default function CobradorPage() {
                                     <button
                                       type="button"
                                       onClick={() => setMontosMoraInput((prev) => ({ ...prev, [cliente._creditoId]: String(moraPendiente) }))}
-                                      className="px-2.5 py-2 text-[10px] text-red-600 font-bold border-l border-red-200 whitespace-nowrap"
+                                      className="px-2.5 py-2 text-[10px] text-red-400 font-bold border-l border-red-900/50 whitespace-nowrap"
                                     >
                                       Total
                                     </button>
@@ -648,14 +648,14 @@ export default function CobradorPage() {
 
                             {/* Input de monto recibido */}
                             <div className="mb-3">
-                              <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Monto recibido</label>
-                              <div className="flex items-center bg-white border border-gray-200 rounded-xl overflow-hidden">
-                                <span className="pl-3 text-gray-400 text-sm font-medium">$</span>
+                              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Monto recibido</label>
+                              <div className="flex items-center bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+                                <span className="pl-3 text-gray-500 text-sm font-medium">$</span>
                                 <input
                                   type="number"
                                   min="0"
                                   step="1"
-                                  className="flex-1 px-2 py-2.5 bg-transparent text-gray-900 font-semibold text-sm outline-none"
+                                  className="flex-1 px-2 py-2.5 bg-transparent text-white font-semibold text-sm outline-none"
                                   value={montosInput[cliente._entryKey] !== undefined ? montosInput[cliente._entryKey] : cuotaPendiente}
                                   onChange={(e) => setMontosInput((prev) => ({ ...prev, [cliente._entryKey]: e.target.value }))}
                                 />
@@ -663,7 +663,7 @@ export default function CobradorPage() {
                                   <button
                                     type="button"
                                     onClick={() => setMontosInput((prev) => ({ ...prev, [cliente._entryKey]: String(cuotaPendiente) }))}
-                                    className="px-2.5 py-2 text-[10px] text-red-600 font-bold border-l border-gray-200 whitespace-nowrap"
+                                    className="px-2.5 py-2 text-[10px] text-red-400 font-bold border-l border-gray-700 whitespace-nowrap"
                                   >
                                     Total
                                   </button>
@@ -672,17 +672,17 @@ export default function CobradorPage() {
                             </div>
 
                             {credito.interes_total > 0 && (
-                              <div className="rounded-xl p-3 mb-3 bg-amber-50 border border-amber-100">
-                                <p className="text-xs text-amber-600 uppercase tracking-wider font-medium mb-2">Desglose diario</p>
+                              <div className="rounded-xl p-3 mb-3 bg-amber-950/20 border border-amber-900/40">
+                                <p className="text-xs text-amber-500 uppercase tracking-wider font-medium mb-2">Desglose diario</p>
                                 <div className="flex justify-between text-xs">
                                   <span className="text-gray-500">Capital/día</span>
-                                  <span className="text-gray-700 font-medium">
+                                  <span className="text-gray-300 font-medium">
                                     ${((credito.monto_total / (credito.monto_total + credito.interes_total)) * credito.monto_diario).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
                                   </span>
                                 </div>
                                 <div className="flex justify-between text-xs mt-1">
-                                  <span className="text-amber-600">+ Interés/día</span>
-                                  <span className="text-amber-700 font-medium">
+                                  <span className="text-amber-500">+ Interés/día</span>
+                                  <span className="text-amber-400 font-medium">
                                     ${((credito.interes_total / (credito.monto_total + credito.interes_total)) * credito.monto_diario).toLocaleString('es-MX', { maximumFractionDigits: 2 })}
                                   </span>
                                 </div>
@@ -703,7 +703,7 @@ export default function CobradorPage() {
                                     });
                                   }}
                                   disabled={pagandoMora === cliente._creditoId}
-                                  className="w-full border-2 border-red-300 text-red-600 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:bg-red-50 disabled:opacity-50 transition-colors"
+                                  className="w-full border-2 border-red-800 text-red-400 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:bg-red-950/40 disabled:opacity-50 transition-colors"
                                 >
                                   {pagandoMora === cliente._creditoId
                                     ? 'Registrando mora...'
@@ -738,7 +738,7 @@ export default function CobradorPage() {
                               </button>
                               <button
                                 onClick={() => { setDetalleCliente(cliente); setTabDetalle('perfil'); }}
-                                className="w-full py-2 border border-gray-200 text-gray-400 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                                className="w-full py-2 border border-gray-700 text-gray-500 text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 hover:bg-gray-800 active:bg-gray-700 transition-colors"
                               >
                                 <i className="fa-solid fa-user text-xs" />
                                 Ver perfil del cliente
@@ -752,23 +752,23 @@ export default function CobradorPage() {
                 )}
 
                 {ruta.length === 0 && completados.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-gray-100 text-center py-8 px-6 mb-6">
+                  <div className="bg-gray-900 rounded-2xl border border-gray-800 text-center py-8 px-6 mb-6">
                     <p className="text-3xl mb-2">🎉</p>
-                    <h3 className="text-gray-800 font-semibold">¡Ruta completada!</h3>
-                    <p className="text-gray-400 text-sm mt-1">Cobraste los {completados.length} clientes de hoy.</p>
+                    <h3 className="text-gray-300 font-semibold">¡Ruta completada!</h3>
+                    <p className="text-gray-500 text-sm mt-1">Cobraste los {completados.length} clientes de hoy.</p>
                   </div>
                 )}
 
                 {completados.length > 0 && (
                   <>
-                    <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-3">
                       Pagados hoy ({completados.length})
                     </p>
                     <div className="flex flex-col gap-2">
                       {completados.map((cliente) => {
                         const credito = cliente._credito;
                         return (
-                          <div key={cliente._entryKey} className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-center justify-between gap-3">
+                          <div key={cliente._entryKey} className="bg-emerald-950/20 border border-emerald-900/40 rounded-2xl p-4 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shrink-0">
                                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -776,18 +776,18 @@ export default function CobradorPage() {
                                 </svg>
                               </div>
                               <div className="min-w-0">
-                                <p className="text-sm font-semibold text-gray-800 truncate">{cliente.profiles?.nombre_completo}</p>
+                                <p className="text-sm font-semibold text-gray-200 truncate">{cliente.profiles?.nombre_completo}</p>
                                 <p className="text-xs text-gray-500">
                                   #{cliente.numero_cliente}{cliente.direccion ? ` · ${cliente.direccion.split(',')[0]}` : ''}
                                 </p>
                               </div>
                             </div>
-                            <p className="text-emerald-700 font-bold text-sm shrink-0">
+                            <p className="text-emerald-400 font-bold text-sm shrink-0">
                               +${Math.round(credito?.monto_diario || 0).toLocaleString('es-MX')}
                             </p>
                             <button
                               onClick={() => { setDetalleCliente(cliente); setTabDetalle('perfil'); }}
-                              className="shrink-0 w-8 h-8 rounded-full border border-emerald-300 flex items-center justify-center text-emerald-600 hover:bg-emerald-100 active:bg-emerald-200 transition-colors"
+                              className="shrink-0 w-8 h-8 rounded-full border border-emerald-800 flex items-center justify-center text-emerald-400 hover:bg-emerald-900/40 active:bg-emerald-900/60 transition-colors"
                               title="Ver perfil del cliente"
                             >
                               <i className="fa-solid fa-user text-xs" />
@@ -808,11 +808,11 @@ export default function CobradorPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-gray-900 font-bold text-base">Mis Cobros</h2>
-                <p className="text-gray-400 text-xs">Historial de pagos registrados por ti</p>
+                <h2 className="text-white font-bold text-base">Mis Cobros</h2>
+                <p className="text-gray-500 text-xs">Historial de pagos registrados por ti</p>
               </div>
               {historialCargado && (
-                <button onClick={cargarHistorial} className="text-gray-400 hover:text-red-500 transition-colors" title="Actualizar">
+                <button onClick={cargarHistorial} className="text-gray-500 hover:text-red-400 transition-colors" title="Actualizar">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -822,12 +822,12 @@ export default function CobradorPage() {
             </div>
 
             {loadingHistorial ? (
-              <div className="text-center py-16 text-gray-400 text-sm">Cargando historial...</div>
+              <div className="text-center py-16 text-gray-500 text-sm">Cargando historial...</div>
             ) : historial.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-100 text-center py-12 px-6">
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 text-center py-12 px-6">
                 <p className="text-3xl mb-3">📋</p>
-                <p className="text-gray-700 font-medium">Sin cobros registrados aún</p>
-                <p className="text-gray-400 text-sm mt-1">Aquí verás todos tus pagos anteriores.</p>
+                <p className="text-gray-300 font-medium">Sin cobros registrados aún</p>
+                <p className="text-gray-500 text-sm mt-1">Aquí verás todos tus pagos anteriores.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-4">
@@ -840,35 +840,35 @@ export default function CobradorPage() {
                   const esHoy = fecha === today;
 
                   return (
-                    <div key={fecha} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <div key={fecha} className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
                       {/* Cabecera de fecha */}
-                      <div className={`px-4 py-2.5 flex justify-between items-center ${esHoy ? 'bg-red-50 border-b border-red-100' : 'bg-gray-50 border-b border-gray-100'}`}>
-                        <p className={`text-xs font-semibold capitalize ${esHoy ? 'text-red-600' : 'text-gray-600'}`}>
+                      <div className={`px-4 py-2.5 flex justify-between items-center ${esHoy ? 'bg-red-950/30 border-b border-red-900/40' : 'bg-gray-800/60 border-b border-gray-800'}`}>
+                        <p className={`text-xs font-semibold capitalize ${esHoy ? 'text-red-400' : 'text-gray-400'}`}>
                           {esHoy ? '▶ Hoy · ' : ''}{label}
                         </p>
-                        <span className={`text-xs font-bold ${esHoy ? 'text-red-600' : 'text-emerald-600'}`}>
+                        <span className={`text-xs font-bold ${esHoy ? 'text-red-400' : 'text-emerald-400'}`}>
                           +${Math.round(totalFecha).toLocaleString('es-MX')}
                         </span>
                       </div>
 
                       {/* Pagos del día */}
-                      <div className="divide-y divide-gray-50">
+                      <div className="divide-y divide-gray-800">
                         {pagosDelDia.map((pago: any) => (
                           <div key={pago.id} className="px-4 py-3 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-7 h-7 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
-                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <div className="w-7 h-7 bg-emerald-900/30 rounded-full flex items-center justify-center shrink-0">
+                                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                 </svg>
                               </div>
                               <div>
-                                <p className="text-sm font-medium text-gray-800 leading-tight">{pago.cliente_nombre}</p>
-                                <p className="text-[10px] text-gray-400">
+                                <p className="text-sm font-medium text-gray-200 leading-tight">{pago.cliente_nombre}</p>
+                                <p className="text-[10px] text-gray-500">
                                   #{pago.numero_cliente} · Pago {pago.numero_dia}/{pago.total_pagos}
                                 </p>
                               </div>
                             </div>
-                            <p className="text-emerald-600 font-semibold text-sm shrink-0">
+                            <p className="text-emerald-400 font-semibold text-sm shrink-0">
                               +${Math.round(pago.monto_diario).toLocaleString('es-MX')}
                             </p>
                           </div>
@@ -886,8 +886,8 @@ export default function CobradorPage() {
         {activeTab === 'mapa' && (
           <div>
             <div className="mb-4">
-              <h2 className="text-gray-900 font-bold text-base">Mi Ubicación</h2>
-              <p className="text-gray-400 text-xs">Tu posición GPS en tiempo real</p>
+              <h2 className="text-white font-bold text-base">Mi Ubicación</h2>
+              <p className="text-gray-500 text-xs">Tu posición GPS en tiempo real</p>
             </div>
 
             {/* Estado GPS */}
@@ -904,11 +904,11 @@ export default function CobradorPage() {
         {activeTab === 'perfil' && (
           <div>
             <div className="mb-4">
-              <h2 className="text-gray-900 font-bold text-base">Mi Perfil</h2>
+              <h2 className="text-white font-bold text-base">Mi Perfil</h2>
             </div>
 
             {/* Avatar + datos */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 mb-4">
               <div className="flex items-center gap-4 mb-4">
                 {fotoCobrador ? (
                   <img
@@ -922,53 +922,53 @@ export default function CobradorPage() {
                   </div>
                 )}
                 <div>
-                  <p className="text-gray-900 font-bold text-base leading-tight">{nombreCobrador || 'Cobrador'}</p>
+                  <p className="text-white font-bold text-base leading-tight">{nombreCobrador || 'Cobrador'}</p>
                   <span className="text-xs text-white bg-red-600 px-2 py-0.5 rounded-full font-medium">Cobrador</span>
                 </div>
               </div>
 
               {telefonoCobrador && (
-                <a href={`tel:${telefonoCobrador}`} className="flex items-center gap-3 py-2.5 border-t border-gray-50">
-                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <a href={`tel:${telefonoCobrador}`} className="flex items-center gap-3 py-2.5 border-t border-gray-800">
+                  <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                         d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Teléfono</p>
-                    <p className="text-gray-700 text-sm">{telefonoCobrador}</p>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Teléfono</p>
+                    <p className="text-gray-300 text-sm">{telefonoCobrador}</p>
                   </div>
                 </a>
               )}
 
               {/* GPS status */}
-              <div className="flex items-center gap-3 py-2.5 border-t border-gray-50">
-                <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-3 py-2.5 border-t border-gray-800">
+                <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Rastreo GPS</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">Rastreo GPS</p>
                   <p className={`text-sm font-medium ${gpsInfo[gpsEstado].color}`}>{gpsInfo[gpsEstado].label}</p>
                 </div>
               </div>
             </div>
 
             {/* Resumen del día */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
-              <p className="text-xs text-gray-400 uppercase tracking-wider font-medium mb-3">Resumen de hoy</p>
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-3">Resumen de hoy</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-[10px] text-gray-400">Cobros realizados</p>
-                  <p className="text-xl font-bold text-gray-900">{completados.length}</p>
+                  <p className="text-[10px] text-gray-500">Cobros realizados</p>
+                  <p className="text-xl font-bold text-white">{completados.length}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-gray-400">Total cobrado</p>
-                  <p className="text-xl font-bold text-emerald-600">${Math.round(totalCobrado).toLocaleString('es-MX')}</p>
+                  <p className="text-[10px] text-gray-500">Total cobrado</p>
+                  <p className="text-xl font-bold text-emerald-400">${Math.round(totalCobrado).toLocaleString('es-MX')}</p>
                 </div>
               </div>
             </div>
@@ -976,7 +976,7 @@ export default function CobradorPage() {
             {/* Cerrar sesión */}
             <button
               onClick={cerrarSesion}
-              className="w-full border-2 border-red-200 text-red-600 py-3 rounded-xl text-sm font-semibold active:bg-red-50 transition-colors flex items-center justify-center gap-2"
+              className="w-full border-2 border-red-900/50 text-red-400 py-3 rounded-xl text-sm font-semibold active:bg-red-950/30 transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -993,25 +993,27 @@ export default function CobradorPage() {
       {confirmacion && (
         <BottomSheet
           onClose={() => setConfirmacion(null)}
+          bg="bg-gray-950"
+          handleColor="bg-gray-700"
           overlayBg="bg-black/60 backdrop-blur-sm"
           overlayZ={120}
           sheetZ={121}
           maxHeight="70dvh"
         >
           <div className="px-5 pb-6">
-            <p className="text-center text-gray-400 text-[11px] uppercase tracking-widest mb-1">
+            <p className="text-center text-gray-500 text-[11px] uppercase tracking-widest mb-1">
               {confirmacion.tipo === 'pago' ? '¿Registrar pago?' : '¿Registrar mora?'}
             </p>
-            <p className="text-center font-bold text-gray-900 text-base leading-tight mb-1">
+            <p className="text-center font-bold text-white text-base leading-tight mb-1">
               {confirmacion.clienteNombre}
             </p>
-            <p className="text-center text-3xl font-black text-red-600 mb-6">
+            <p className="text-center text-3xl font-black text-red-500 mb-6">
               ${confirmacion.monto.toLocaleString('es-MX')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmacion(null)}
-                className="flex-1 py-3.5 border-2 border-gray-200 text-gray-600 font-semibold rounded-2xl text-sm active:bg-gray-50 transition-colors"
+                className="flex-1 py-3.5 border-2 border-gray-700 text-gray-400 font-semibold rounded-2xl text-sm active:bg-gray-800 transition-colors"
               >
                 Cancelar
               </button>
@@ -1061,23 +1063,23 @@ export default function CobradorPage() {
           : '?';
 
         return (
-          <BottomSheet onClose={() => setDetalleCliente(null)} overlayZ={110} sheetZ={111} maxHeight="92dvh">
+          <BottomSheet onClose={() => setDetalleCliente(null)} bg="bg-gray-950" handleColor="bg-gray-700" overlayZ={110} sheetZ={111} maxHeight="92dvh">
 
               {/* Header compacto */}
-              <div className="px-5 pt-1 pb-3 shrink-0 border-b border-gray-100">
+              <div className="px-5 pt-1 pb-3 shrink-0 border-b border-gray-800">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-black text-sm shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-red-900/30 text-red-400 flex items-center justify-center font-black text-sm shrink-0">
                       {iniciales}
                     </div>
                     <div>
-                      <p className="text-gray-900 font-bold text-base leading-tight">{perfil.nombre_completo}</p>
-                      <p className="text-gray-400 text-[10px] font-mono">#{detalleCliente.numero_cliente}</p>
+                      <p className="text-white font-bold text-base leading-tight">{perfil.nombre_completo}</p>
+                      <p className="text-gray-500 text-[10px] font-mono">#{detalleCliente.numero_cliente}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setDetalleCliente(null)}
-                    className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 shrink-0"
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 text-gray-400 shrink-0"
                   >
                     <i className="fa-solid fa-xmark text-sm" />
                   </button>
@@ -1091,8 +1093,8 @@ export default function CobradorPage() {
                       onClick={() => setTabDetalle(t)}
                       className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
                         tabDetalle === t
-                          ? t === 'perfil' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'
-                          : 'bg-gray-100 text-gray-500'
+                          ? t === 'perfil' ? 'bg-red-600 text-white' : 'bg-gray-700 text-white'
+                          : 'bg-gray-800 text-gray-500'
                       }`}
                     >
                       {t === 'perfil' ? <><i className="fa-solid fa-user mr-1.5" />Perfil</> : <><i className="fa-solid fa-calendar-days mr-1.5" />Hoja de pagos</>}
@@ -1106,37 +1108,37 @@ export default function CobradorPage() {
                 <div className="flex-1 overflow-y-auto">
                   {/* Datos de contacto */}
                   <div className="px-5 pt-4 pb-2">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-3">Datos de contacto</p>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-3">Datos de contacto</p>
                     <div className="space-y-2">
                       {perfil.telefono && (
                         <a
                           href={`tel:${perfil.telefono}`}
-                          className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 active:bg-gray-100 transition-colors"
+                          className="flex items-center gap-3 bg-gray-800/60 rounded-2xl px-4 py-3 active:bg-gray-800 transition-colors"
                         >
-                          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                            <i className="fa-solid fa-phone text-emerald-600 text-sm" />
+                          <div className="w-9 h-9 rounded-full bg-emerald-900/30 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-phone text-emerald-400 text-sm" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[10px] text-gray-400 uppercase">Teléfono</p>
-                            <p className="text-gray-900 font-semibold text-sm">{perfil.telefono}</p>
+                            <p className="text-[10px] text-gray-500 uppercase">Teléfono</p>
+                            <p className="text-white font-semibold text-sm">{perfil.telefono}</p>
                           </div>
-                          <i className="fa-solid fa-chevron-right text-gray-300 text-xs" />
+                          <i className="fa-solid fa-chevron-right text-gray-600 text-xs" />
                         </a>
                       )}
 
                       {perfil.email && (
                         <a
                           href={`mailto:${perfil.email}`}
-                          className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 active:bg-gray-100 transition-colors"
+                          className="flex items-center gap-3 bg-gray-800/60 rounded-2xl px-4 py-3 active:bg-gray-800 transition-colors"
                         >
-                          <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                            <i className="fa-solid fa-envelope text-blue-600 text-sm" />
+                          <div className="w-9 h-9 rounded-full bg-blue-900/30 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-envelope text-blue-400 text-sm" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[10px] text-gray-400 uppercase">Correo</p>
-                            <p className="text-gray-900 font-semibold text-sm truncate">{perfil.email}</p>
+                            <p className="text-[10px] text-gray-500 uppercase">Correo</p>
+                            <p className="text-white font-semibold text-sm truncate">{perfil.email}</p>
                           </div>
-                          <i className="fa-solid fa-chevron-right text-gray-300 text-xs" />
+                          <i className="fa-solid fa-chevron-right text-gray-600 text-xs" />
                         </a>
                       )}
 
@@ -1145,16 +1147,16 @@ export default function CobradorPage() {
                           href={`https://maps.google.com/?q=${encodeURIComponent(detalleCliente.direccion)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 active:bg-gray-100 transition-colors"
+                          className="flex items-center gap-3 bg-gray-800/60 rounded-2xl px-4 py-3 active:bg-gray-800 transition-colors"
                         >
-                          <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                            <i className="fa-solid fa-location-dot text-red-500 text-sm" />
+                          <div className="w-9 h-9 rounded-full bg-red-900/30 flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-location-dot text-red-400 text-sm" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[10px] text-gray-400 uppercase">Dirección</p>
-                            <p className="text-gray-900 font-semibold text-sm leading-snug">{detalleCliente.direccion}</p>
+                            <p className="text-[10px] text-gray-500 uppercase">Dirección</p>
+                            <p className="text-white font-semibold text-sm leading-snug">{detalleCliente.direccion}</p>
                           </div>
-                          <i className="fa-solid fa-chevron-right text-gray-300 text-xs" />
+                          <i className="fa-solid fa-chevron-right text-gray-600 text-xs" />
                         </a>
                       )}
                     </div>
@@ -1162,41 +1164,41 @@ export default function CobradorPage() {
 
                   {/* Datos del crédito */}
                   <div className="px-5 pt-4 pb-6">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-3">Crédito activo</p>
-                    <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-3">Crédito activo</p>
+                    <div className="bg-gray-800/60 rounded-2xl p-4 space-y-3">
                       <div className="grid grid-cols-3 gap-3 text-center">
                         <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Cuota</p>
-                          <p className="text-base font-black text-red-600">${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                          <p className="text-[10px] text-gray-500 uppercase">Cuota</p>
+                          <p className="text-base font-black text-red-500">${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Capital</p>
-                          <p className="text-base font-black text-gray-900">${(credito.monto_total || 0).toLocaleString('es-MX')}</p>
+                          <p className="text-[10px] text-gray-500 uppercase">Capital</p>
+                          <p className="text-base font-black text-white">${(credito.monto_total || 0).toLocaleString('es-MX')}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Pagos</p>
-                          <p className="text-base font-black text-gray-900">{total}</p>
+                          <p className="text-[10px] text-gray-500 uppercase">Pagos</p>
+                          <p className="text-base font-black text-white">{total}</p>
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-gray-200">
-                        <div className="flex justify-between text-[10px] text-gray-400 mb-1.5">
+                      <div className="pt-3 border-t border-gray-700">
+                        <div className="flex justify-between text-[10px] text-gray-500 mb-1.5">
                           <span>{pagados} de {total} pagos</span>
-                          <span className="font-bold text-emerald-600">{porcentaje}%</span>
+                          <span className="font-bold text-emerald-400">{porcentaje}%</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
                           <div
                             className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
                             style={{ width: `${porcentaje}%` }}
                           />
                         </div>
                         {atrasados > 0 && (
-                          <p className="text-red-500 text-[10px] font-bold mt-1.5">
+                          <p className="text-red-400 text-[10px] font-bold mt-1.5">
                             <i className="fa-solid fa-triangle-exclamation mr-1" />{atrasados} pago{atrasados !== 1 ? 's' : ''} atrasado{atrasados !== 1 ? 's' : ''}
                           </p>
                         )}
                         {parciales > 0 && (
-                          <p className="text-amber-500 text-[10px] font-bold mt-0.5">
+                          <p className="text-amber-400 text-[10px] font-bold mt-0.5">
                             <i className="fa-solid fa-coins mr-1" />{parciales} con abono parcial
                           </p>
                         )}
@@ -1208,23 +1210,23 @@ export default function CobradorPage() {
 
               {/* ── TAB PAGOS ── */}
               {tabDetalle === 'pagos' && (
-                <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+                <div className="flex-1 overflow-y-auto divide-y divide-gray-800">
                   {cronograma.map((item) => (
                     <div
                       key={item.numero}
                       className={`flex items-center gap-3 px-5 py-2.5 ${
-                        item.pagado   ? 'bg-emerald-50/50' :
-                        item.parcial  ? 'bg-amber-50/60' :
-                        item.atrasado ? 'bg-red-50/50' :
-                        item.esHoy    ? 'bg-blue-50/50' : ''
+                        item.pagado   ? 'bg-emerald-950/20' :
+                        item.parcial  ? 'bg-amber-950/20' :
+                        item.atrasado ? 'bg-red-950/20' :
+                        item.esHoy    ? 'bg-blue-950/20' : ''
                       }`}
                     >
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${
-                        item.pagado   ? 'border-emerald-400 bg-emerald-100 text-emerald-700' :
-                        item.parcial  ? 'border-amber-400 bg-amber-100 text-amber-700' :
-                        item.atrasado ? 'border-red-400 bg-red-100 text-red-700' :
-                        item.esHoy    ? 'border-blue-400 bg-blue-100 text-blue-700' :
-                                        'border-gray-200 bg-white text-gray-400'
+                        item.pagado   ? 'border-emerald-700 bg-emerald-900/30 text-emerald-400' :
+                        item.parcial  ? 'border-amber-700 bg-amber-900/30 text-amber-400' :
+                        item.atrasado ? 'border-red-700 bg-red-900/30 text-red-400' :
+                        item.esHoy    ? 'border-blue-700 bg-blue-900/30 text-blue-400' :
+                                        'border-gray-700 bg-gray-800 text-gray-500'
                       }`}>
                         {item.pagado  ? <i className="fa-solid fa-check text-[10px]" /> :
                          item.parcial ? <i className="fa-solid fa-coins text-[10px]" /> :
@@ -1233,29 +1235,29 @@ export default function CobradorPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className={`text-xs font-semibold ${
-                            item.pagado   ? 'text-emerald-700' :
-                            item.parcial  ? 'text-amber-700' :
-                            item.atrasado ? 'text-red-700' :
-                            item.esHoy    ? 'text-blue-700' : 'text-gray-700'
+                            item.pagado   ? 'text-emerald-400' :
+                            item.parcial  ? 'text-amber-400' :
+                            item.atrasado ? 'text-red-400' :
+                            item.esHoy    ? 'text-blue-400' : 'text-gray-300'
                           }`}>Pago {item.numero}</p>
-                          {item.esHoy    && <span className="text-[9px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">HOY</span>}
-                          {item.parcial  && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">ABONO PARCIAL</span>}
-                          {item.atrasado && !item.parcial && <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">ATRASADO</span>}
-                          {item.mora > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">+${item.mora} mora</span>}
+                          {item.esHoy    && <span className="text-[9px] font-bold bg-blue-900/30 text-blue-400 px-1.5 py-0.5 rounded-full">HOY</span>}
+                          {item.parcial  && <span className="text-[9px] font-bold bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded-full">ABONO PARCIAL</span>}
+                          {item.atrasado && !item.parcial && <span className="text-[9px] font-bold bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded-full">ATRASADO</span>}
+                          {item.mora > 0 && <span className="text-[9px] font-bold bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded-full">+${item.mora} mora</span>}
                         </div>
-                        <p className={`text-[10px] ${item.atrasado && !item.parcial ? 'text-red-400' : 'text-gray-400'}`}>{item.fecha}</p>
+                        <p className={`text-[10px] ${item.atrasado && !item.parcial ? 'text-red-500' : 'text-gray-500'}`}>{item.fecha}</p>
                       </div>
                       <div className="text-right shrink-0">
                         {item.parcial ? (
                           <>
-                            <p className="text-sm font-bold text-amber-600">${item.montoPagado.toLocaleString('es-MX')}</p>
-                            <p className="text-[10px] text-gray-400">de ${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
+                            <p className="text-sm font-bold text-amber-400">${item.montoPagado.toLocaleString('es-MX')}</p>
+                            <p className="text-[10px] text-gray-500">de ${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
                           </>
                         ) : (
                           <p className={`text-sm font-bold ${
-                            item.pagado   ? 'text-emerald-600' :
-                            item.atrasado ? 'text-red-500' :
-                            item.esHoy    ? 'text-blue-600' : 'text-gray-600'
+                            item.pagado   ? 'text-emerald-400' :
+                            item.atrasado ? 'text-red-400' :
+                            item.esHoy    ? 'text-blue-400' : 'text-gray-400'
                           }`}>${Math.round(credito.monto_diario).toLocaleString('es-MX')}</p>
                         )}
                       </div>
