@@ -1,39 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '../../lib/supabase';
+import { mutate } from 'swr';
 import TableWithDialog from '../../components/TableWithDialog';
 import UserNav from '../../components/UserNav';
 import RegisterClientForm from '../../components/RegisterClientForm';
 import ClientesEnMora from '../../components/ClientesEnMora';
 import CreditosActivos from '../../components/CreditosActivos';
 import { Input } from '../../components/ui/input';
+import { useCobradores } from '../../lib/hooks/useCobradores';
+import { CLIENTES_KEY } from '../../lib/hooks/useClientesConCreditos';
 
 type Vista = 'todos' | 'mora' | 'creditos';
 
 export default function ClientesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [cobradores, setCobradores] = useState<any[]>([]);
+  const { cobradores } = useCobradores();
   const [vista, setVista] = useState<Vista>('todos');
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    cargarCobradores();
-  }, []);
-
-  const cargarCobradores = async () => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, nombre_completo')
-        .eq('rol', 'cobrador');
-      if (data) setCobradores(data);
-    } catch (error) {
-      console.error("Error al cargar cobradores:", error);
-    }
-  };
 
   return (
     <main className="min-h-screen bg-[#030712] pb-20 md:p-8">
@@ -163,7 +148,7 @@ export default function ClientesPage() {
         </div>
 
         {/* Contenido según tab */}
-        {vista === 'todos'    && <TableWithDialog key={refreshKey} searchQuery={searchQuery} />}
+        {vista === 'todos'    && <TableWithDialog searchQuery={searchQuery} />}
         {vista === 'creditos' && <CreditosActivos searchQuery={searchQuery} />}
         {vista === 'mora'     && <ClientesEnMora searchQuery={searchQuery} />}
 
@@ -183,7 +168,7 @@ export default function ClientesPage() {
             <div className="overflow-y-auto flex-1 min-h-0">
               <RegisterClientForm
                 cobradores={cobradores}
-                onSuccess={() => { setIsModalOpen(false); setRefreshKey(k => k + 1); }}
+                onSuccess={() => { setIsModalOpen(false); mutate(CLIENTES_KEY); }}
               />
             </div>
           </div>

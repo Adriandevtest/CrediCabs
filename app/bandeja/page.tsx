@@ -2,18 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { mutate } from 'swr';
 import { supabase } from '../../lib/supabase';
 import UserNav from '../../components/UserNav';
 import { InterestBreakdown } from '../../components/InterestBreakdown';
 import { LumaSpin } from '../../components/luma-spin';
 import { ImageLightbox } from '../../components/ImageLightbox';
+import { useCobradores } from '../../lib/hooks/useCobradores';
+import { CLIENTES_KEY } from '../../lib/hooks/useClientesConCreditos';
 
 export default function BandejaPage() {
   const [bandejaTab, setBandejaTab] = useState<'prospectos' | 'transferencias'>('prospectos');
 
   // ── Prospectos ──────────────────────────────────────────────
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
-  const [cobradores, setCobradores] = useState<any[]>([]);
+  const { cobradores } = useCobradores();
   const [loading, setLoading] = useState(true);
   const [selectedSolicitud, setSelectedSolicitud] = useState<any | null>(null);
   const [formData, setFormData] = useState({ monto: 5000, semanas: 28, tasa_interes: 40, cobrador_id: '' });
@@ -77,12 +80,12 @@ export default function BandejaPage() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const [solRes, cobRes] = await Promise.all([
-        supabase.from('solicitudes').select('*').eq('estado', 'pendiente').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, nombre_completo').eq('rol', 'cobrador'),
-      ]);
-      if (solRes.data) setSolicitudes(solRes.data);
-      if (cobRes.data) setCobradores(cobRes.data);
+      const { data } = await supabase
+        .from('solicitudes')
+        .select('*')
+        .eq('estado', 'pendiente')
+        .order('created_at', { ascending: false });
+      if (data) setSolicitudes(data);
     } catch (error) {
       console.error(error);
     } finally {
@@ -157,6 +160,7 @@ export default function BandejaPage() {
       alert('¡Prospecto aprobado! Se ha convertido en cliente y su calendario de pagos está listo.');
       setSelectedSolicitud(null);
       cargarDatos();
+      mutate(CLIENTES_KEY);
     } catch (error: any) {
       alert('Error al aprobar: ' + error.message);
     } finally {

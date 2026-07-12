@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useMemo, useState } from 'react';
+import { useClientesConCreditos } from '../lib/hooks/useClientesConCreditos';
+import { useCobradores } from '../lib/hooks/useCobradores';
 import { diasDeMora, MORA_POR_DIA } from '../lib/mora';
 
 interface ClienteMora {
@@ -18,100 +19,68 @@ interface ClienteMora {
 }
 
 export default function ClientesEnMora({ searchQuery }: { searchQuery: string }) {
-  const [clientes, setClientes] = useState<ClienteMora[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { clientes: clientesData, loading, mutate } = useClientesConCreditos();
+  const { cobradores: cobradoresData } = useCobradores();
   const [cobradorFiltro, setCobradorFiltro] = useState('');
-  const [cobradores, setCobradores] = useState<{ id: string; nombre: string }[]>([]);
 
-  useEffect(() => {
-    cargar();
-    // Refresca automáticamente cada 2 minutos por si el cobrador registra pagos
-    const interval = setInterval(cargar, 2 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const cobradores = useMemo(
+    () => cobradoresData.map((c) => ({ id: c.id, nombre: c.nombre_completo })),
+    [cobradoresData]
+  );
 
-  const cargar = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select(`
-          id,
-          numero_cliente,
-          cobrador_asignado_id,
-          profiles ( nombre_completo, telefono ),
-          creditos (
-            id,
-            monto_diario,
-            estado,
-            pagos_diarios ( fecha_esperada, pagado )
-          )
-        `);
+  // Deriva la lista de clientes en mora del dataset compartido en vez de
+  // pedirlo aparte — antes esta pestaña tenía su propia query completa de
+  // clientes+creditos+pagos_diarios más un setInterval de 2 min propio.
+  const clientes = useMemo(() => {
+    const cobMap = new Map(cobradoresData.map((c) => [c.id, c.nombre_completo]));
+    const resultado: ClienteMora[] = [];
 
-      if (error) throw error;
+    for (const cliente of clientesData) {
+      const creditos: any[] = cliente.creditos || [];
+      // Excluir solo estados terminales; null/activo/atrasado son válidos
+      const creditoActivo = creditos.find((c: any) =>
+        c.estado !== 'liquidado' && c.estado !== 'completado'
+      );
+      if (!creditoActivo) continue;
 
-      // Buscar cobradores para el filtro
-      const { data: cobData } = await supabase
-        .from('profiles')
-        .select('id, nombre_completo')
-        .eq('rol', 'cobrador');
+      const pagos: { fecha_esperada: string; pagado: boolean }[] =
+        creditoActivo.pagos_diarios || [];
 
-      const cobMap = new Map((cobData || []).map((c: any) => [c.id, c.nombre_completo]));
-      setCobradores((cobData || []).map((c: any) => ({ id: c.id, nombre: c.nombre_completo })));
+      const dias = diasDeMora(pagos);
+      if (dias === 0) continue; // sin mora, no lo incluimos
 
-      const resultado: ClienteMora[] = [];
-
-      for (const cliente of data || []) {
-        const creditos: any[] = (cliente as any).creditos || [];
-        // Excluir solo estados terminales; null/activo/atrasado son válidos
-        const creditoActivo = creditos.find((c: any) =>
-          c.estado !== 'liquidado' && c.estado !== 'completado'
-        );
-        if (!creditoActivo) continue;
-
-        const pagos: { fecha_esperada: string; pagado: boolean }[] =
-          creditoActivo.pagos_diarios || [];
-
-        const dias = diasDeMora(pagos);
-        if (dias === 0) continue; // sin mora, no lo incluimos
-
-        resultado.push({
-          id: cliente.id,
-          numero_cliente: cliente.numero_cliente,
-          nombre: (cliente as any).profiles?.nombre_completo || 'Sin nombre',
-          telefono: (cliente as any).profiles?.telefono || '',
-          cobrador_nombre: cobMap.get((cliente as any).cobrador_asignado_id) || 'Sin asignar',
-          monto_diario: creditoActivo.monto_diario,
-          credito_id: creditoActivo.id,
-          dias,
-          mora: dias * MORA_POR_DIA,
-          pagos_diarios: pagos,
-        });
-      }
-
-      // Ordenar por más días de atraso primero
-      resultado.sort((a, b) => b.dias - a.dias);
-      setClientes(resultado);
-    } catch (e) {
-      console.error('Error cargando clientes en mora:', e);
-    } finally {
-      setLoading(false);
+      resultado.push({
+        id: cliente.id,
+        numero_cliente: cliente.numero_cliente,
+        nombre: cliente.profiles?.nombre_completo || 'Sin nombre',
+        telefono: cliente.profiles?.telefono || '',
+        cobrador_nombre: cobMap.get(cliente.cobrador_asignado_id || '') || 'Sin asignar',
+        monto_diario: creditoActivo.monto_diario,
+        credito_id: creditoActivo.id,
+        dias,
+        mora: dias * MORA_POR_DIA,
+        pagos_diarios: pagos,
+      });
     }
-  };
 
-  const filtrados = clientes.filter((c) => {
+    // Ordenar por más días de atraso primero
+    resultado.sort((a, b) => b.dias - a.dias);
+    return resultado;
+  }, [clientesData, cobradoresData]);
+
+  const filtrados = useMemo(() => clientes.filter((c) => {
     const matchSearch = !searchQuery ||
       c.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
       String(c.numero_cliente).includes(searchQuery);
     const matchCobrador = !cobradorFiltro || c.cobrador_nombre === cobradorFiltro;
     return matchSearch && matchCobrador;
-  });
+  }), [clientes, searchQuery, cobradorFiltro]);
 
   // Total real a cobrar = (días × cuota) + (días × $50 mora)
-  const totalACobrar = filtrados.reduce(
+  const totalACobrar = useMemo(() => filtrados.reduce(
     (a, c) => a + Math.round(c.dias * c.monto_diario) + c.mora, 0
-  );
-  const totalMoraPenalidad = filtrados.reduce((a, c) => a + c.mora, 0);
+  ), [filtrados]);
+  const totalMoraPenalidad = useMemo(() => filtrados.reduce((a, c) => a + c.mora, 0), [filtrados]);
   const maxDias = filtrados.length > 0 ? filtrados[0].dias : 0;
 
   if (loading) {
@@ -129,7 +98,7 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
       {/* Refresh manual */}
       <div className="flex justify-end">
         <button
-          onClick={cargar}
+          onClick={() => mutate()}
           disabled={loading}
           className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40"
         >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ClientTable from '../components/ClientTable';
@@ -10,15 +10,16 @@ import AdminPinModal from '../components/AdminPinModal';
 import { supabase } from '../lib/supabase';
 import UserNav from '../components/UserNav';
 import { LumaSpin } from '../components/luma-spin';
+import { useCobradores } from '../lib/hooks/useCobradores';
+import { useClientesConCreditos } from '../lib/hooks/useClientesConCreditos';
 
 export default function Home() {
-  const [cobradores, setCobradores] = useState<any[]>([]);
-  const [metricas, setMetricas] = useState({
-    capital: 0,
-    clientes: 0,
-    cobroHoy: 0,
-    capitalActual: 0,
-  });
+  const { cobradores } = useCobradores();
+  const { clientes: clientesData, mutate: mutateClientes } = useClientesConCreditos();
+  // Total cobrado histórico (cuotas + mora) vía RPC en Postgres — antes se
+  // traían TODOS los pagos pagados de la historia del negocio al navegador
+  // para sumarlos ahí; ahora Postgres hace el SUM y solo viaja un número.
+  const [totalCobradoHistorico, setTotalCobradoHistorico] = useState(0);
   const [corteCaja, setCorteCaja] = useState<any[]>([]);
   const [totalCobradoHoy, setTotalCobradoHoy] = useState(0);
   const [totalMoraHoy, setTotalMoraHoy] = useState(0);
@@ -35,6 +36,41 @@ export default function Home() {
   const [showIngreso, setShowIngreso] = useState(false);
   const [montoIngreso, setMontoIngreso] = useState('');
   const router = useRouter();
+
+  // Créditos activos/atrasados derivados del dataset compartido de clientes
+  // en vez de una query aparte (antes era una tercera fuente independiente
+  // que también traía todo el historial de pagos_diarios de cada crédito).
+  const creditosActivos = useMemo(() => {
+    const list: any[] = [];
+    for (const cliente of clientesData) {
+      for (const credito of cliente.creditos || []) {
+        if (credito.estado === 'activo' || credito.estado == null || credito.estado === 'atrasado') {
+          list.push(credito);
+        }
+      }
+    }
+    return list;
+  }, [clientesData]);
+
+  const totalCapitalPendiente = useMemo(() => creditosActivos.reduce((s, c: any) => {
+    const pagos = c.pagos_diarios || [];
+    const cuota = Number(c.monto_diario || 0);
+    const pendientes = pagos.filter((p: any) => !p.pagado).length;
+    const abonado = pagos.filter((p: any) => !p.pagado).reduce((a: number, p: any) => a + (Number(p.monto_pagado) || 0), 0);
+    return s + Math.max(0, pendientes * cuota - abonado);
+  }, 0), [creditosActivos]);
+
+  const totalPrestado = useMemo(
+    () => creditosActivos.reduce((s, c: any) => s + Number(c.monto_total || 0), 0),
+    [creditosActivos]
+  );
+
+  const metricas = useMemo(() => ({
+    capital: totalCapitalPendiente,
+    clientes: creditosActivos.length,
+    cobroHoy: metaHoy,
+    capitalActual: Math.round(totalCobradoHistorico - totalPrestado),
+  }), [totalCapitalPendiente, creditosActivos.length, metaHoy, totalCobradoHistorico, totalPrestado]);
 
   // Ref para que el handler de realtime siempre llame la versión más reciente
   const cargarRef = useRef<() => Promise<void>>(async () => {});
@@ -106,71 +142,35 @@ export default function Home() {
 
   const cargarDatosDashboard = async () => {
     try {
-      // 1. Cobradores
-      const { data: cobradoresData } = await supabase
-        .from('profiles')
-        .select('id, nombre_completo')
-        .eq('rol', 'cobrador');
-      if (cobradoresData) setCobradores(cobradoresData);
+      // Cobradores y capital pendiente/prestado ya no se piden aquí: vienen
+      // de los hooks compartidos (useCobradores/useClientesConCreditos) y
+      // se recalculan solos vía useMemo cuando esos datos cambian.
+      const cobNombreMap: Record<string, string> = Object.fromEntries(
+        cobradores.map((c) => [c.id, c.nombre_completo])
+      );
 
-      // 2. Créditos activos → Capital pendiente (saldo real por cobrar), Clientes, ROI
-      const { data: creditosData } = await supabase
-        .from('creditos')
-        .select('monto_total, monto_diario, interes_total, pagos_diarios(pagado, monto_pagado)')
-        .or('estado.eq.activo,estado.is.null,estado.eq.atrasado');
-
-      if (creditosData) {
-        // Capital pendiente = suma de pagos sin cobrar × cuota − abonos parciales ya registrados
-        const totalCapital = (creditosData as any[]).reduce((s, c) => {
-          const pagos = c.pagos_diarios || [];
-          const cuota = Number(c.monto_diario || 0);
-          const pendientes = pagos.filter((p: any) => !p.pagado).length;
-          const abonado = pagos.filter((p: any) => !p.pagado).reduce((a: number, p: any) => a + (Number(p.monto_pagado) || 0), 0);
-          return s + Math.max(0, pendientes * cuota - abonado);
-        }, 0);
-
-        // Meta del día: todos los pagos esperados hoy
-        const { data: pagosEsperadosHoy } = await supabase
-          .from('pagos_diarios')
-          .select('creditos(monto_diario)')
-          .eq('fecha_esperada', fechaHoy);
-
-        const meta = (pagosEsperadosHoy || []).reduce(
-          (s: number, p: any) => s + Number(p.creditos?.monto_diario || 0), 0
-        );
-        setMetaHoy(Math.round(meta));
-        setTotalPagosEsperados((pagosEsperadosHoy || []).length);
-
-        // Capital actual = total cobrado (cuotas + mora) − capital prestado en créditos activos
-        const [{ data: pagosRealizados }, { data: creditosActivos }] = await Promise.all([
-          supabase
-            .from('pagos_diarios')
-            .select('mora, creditos!inner(monto_diario)')
-            .eq('pagado', true),
-          supabase
-            .from('creditos')
-            .select('monto_total')
-            .or('estado.eq.activo,estado.is.null,estado.eq.atrasado'),
-        ]);
-
-        const totalCobrado = (pagosRealizados as any[] || []).reduce(
-          (s, p) => s + Number(p.creditos?.monto_diario || 0) + Number(p.mora || 0), 0
-        );
-        const totalPrestado = (creditosActivos as any[] || []).reduce(
-          (s, c) => s + Number(c.monto_total || 0), 0
-        );
-        const capitalActual = totalCobrado - totalPrestado;
-
-        setMetricas({
-          capital: totalCapital,
-          clientes: creditosData.length,
-          cobroHoy: Math.round(meta),
-          capitalActual: Math.round(capitalActual),
-        });
+      // Total cobrado histórico (cuotas + mora) vía RPC — un solo número en
+      // vez de traer cada pago pagado desde el inicio del negocio.
+      const { data: totalesRpc } = await supabase.rpc('total_cobrado_historico').single();
+      if (totalesRpc) {
+        const t = totalesRpc as any;
+        setTotalCobradoHistorico(Number(t.total_cuotas || 0) + Number(t.total_mora || 0));
       }
 
-      // 3. Corte de caja: pagos cobrados hoy (fecha_esperada = hoy, pagado = true)
-      //    Incluye mora cobrada y cobrador que registró el pago
+      // Meta del día: todos los pagos esperados hoy
+      const { data: pagosEsperadosHoy } = await supabase
+        .from('pagos_diarios')
+        .select('creditos(monto_diario)')
+        .eq('fecha_esperada', fechaHoy);
+
+      const meta = (pagosEsperadosHoy || []).reduce(
+        (s: number, p: any) => s + Number(p.creditos?.monto_diario || 0), 0
+      );
+      setMetaHoy(Math.round(meta));
+      setTotalPagosEsperados((pagosEsperadosHoy || []).length);
+
+      // Corte de caja: pagos cobrados hoy (fecha_esperada = hoy, pagado = true)
+      // Incluye mora cobrada y cobrador que registró el pago
       const { data: pagadosHoy } = await supabase
         .from('pagos_diarios')
         .select(`
@@ -190,23 +190,6 @@ export default function Home() {
         .order('numero_dia', { ascending: true });
 
       if (pagadosHoy) {
-        // Obtener nombres de cobradores para mapear
-        const cobIds = [...new Set(
-          (pagadosHoy as any[])
-            .map((p: any) => p.creditos?.clientes?.cobrador_asignado_id)
-            .filter(Boolean)
-        )];
-        let cobNombreMap: Record<string, string> = {};
-        if (cobIds.length > 0) {
-          const { data: cobPerfiles } = await supabase
-            .from('profiles')
-            .select('id, nombre_completo')
-            .in('id', cobIds);
-          cobNombreMap = Object.fromEntries(
-            (cobPerfiles || []).map((c: any) => [c.id, c.nombre_completo])
-          );
-        }
-
         const corteFinal = (pagadosHoy as any[]).map((p: any) => ({
           ...p,
           _cobrador: cobNombreMap[p.creditos?.clientes?.cobrador_asignado_id] || 'Sin asignar',
@@ -219,7 +202,7 @@ export default function Home() {
         setTotalMoraHoy(Math.round(totalMora));
       }
 
-      // 4. Abonos parciales pendientes (pagos no completados con monto > 0)
+      // Abonos parciales pendientes (pagos no completados con monto > 0)
       const { data: abonosData } = await supabase
         .from('pagos_diarios')
         .select(`
@@ -238,19 +221,9 @@ export default function Home() {
         .order('fecha_esperada', { ascending: true });
 
       if (abonosData) {
-        // Obtener nombres de cobradores para abonos
-        const cobIdsAbonos = [...new Set(
-          (abonosData as any[]).map((p: any) => p.creditos?.clientes?.cobrador_asignado_id).filter(Boolean)
-        )] as string[];
-        let cobMapAbonos: Record<string, string> = {};
-        if (cobIdsAbonos.length) {
-          const { data: cobProfs } = await supabase
-            .from('profiles').select('id, nombre_completo').in('id', cobIdsAbonos);
-          cobMapAbonos = Object.fromEntries((cobProfs || []).map((c: any) => [c.id, c.nombre_completo]));
-        }
         const abonosFinal = (abonosData as any[]).map((p: any) => ({
           ...p,
-          _cobrador: cobMapAbonos[p.creditos?.clientes?.cobrador_asignado_id] || 'Sin asignar',
+          _cobrador: cobNombreMap[p.creditos?.clientes?.cobrador_asignado_id] || 'Sin asignar',
         }));
         setAbonosParciales(abonosFinal);
         setTotalAbonoParcial(Math.round(abonosFinal.reduce((s, p) => s + Number(p.monto_pagado || 0), 0)));
@@ -820,7 +793,7 @@ export default function Home() {
         <div className="mb-4">
           <ExcelImportExport
             cobradores={cobradores}
-            onImportDone={cargarDatosDashboard}
+            onImportDone={() => { cargarDatosDashboard(); mutateClientes(); }}
           />
         </div>
 
@@ -828,7 +801,7 @@ export default function Home() {
 
         <ActionModal
           isOpen={isModalOpen}
-          onClose={() => { setIsModalOpen(false); cargarDatosDashboard(); }}
+          onClose={() => { setIsModalOpen(false); cargarDatosDashboard(); mutateClientes(); }}
           cobradores={cobradores}
         />
       </div>

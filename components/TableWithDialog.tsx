@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Checkbox } from "./ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Button } from "./ui/button";
@@ -9,10 +9,12 @@ import { Badge } from "./ui/badge";
 import { supabase } from "../lib/supabase";
 import { ImageLightbox } from "./ImageLightbox";
 import AdminPinModal from "./AdminPinModal";
+import { useCobradores } from "../lib/hooks/useCobradores";
+import { useClientesConCreditos } from "../lib/hooks/useClientesConCreditos";
 
 export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }: { searchQuery: string, statusFilter?: string }) {
-  const [clientes, setClientes] = useState<any[]>([]);
-  const [cobradores, setCobradores] = useState<any[]>([]);
+  const { clientes, loading: loadingClientes, error: clientesError, mutate: mutateClientes } = useClientesConCreditos();
+  const { cobradores } = useCobradores();
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [eliminando, setEliminando] = useState(false);
   const [pinEliminarOpen, setPinEliminarOpen] = useState(false);
@@ -32,16 +34,9 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
   const [nuevoCredito, setNuevoCredito] = useState({ monto_total: 0, num_pagos: 28, tasa: 0 });
   const [agregandoCredito, setAgregandoCredito] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
-  const [loadingClientes, setLoadingClientes] = useState(true);
-  const [errorClientes, setErrorClientes] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [eliminandoMasivo, setEliminandoMasivo] = useState(false);
   const [pinEliminarMasivoOpen, setPinEliminarMasivoOpen] = useState(false);
-
-  useEffect(() => {
-    fetchClientes();
-    fetchCobradores();
-  }, []);
 
   // Preseleccionar datos cuando se abre el diálogo de un cliente
   useEffect(() => {
@@ -65,46 +60,6 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     }
   }, [selectedUser?.id]);
 
-  const fetchClientes = async () => {
-    setLoadingClientes(true);
-    setErrorClientes(null);
-    try {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select(`
-          id,
-          numero_cliente,
-          direccion,
-          cobrador_asignado_id,
-          profiles ( nombre_completo, telefono, foto_url, avatar_url, email ),
-          creditos ( id, monto_total, monto_diario, estado, semanas_autorizadas )
-        `)
-        .order('numero_cliente', { ascending: false })
-        .limit(200);
-
-      if (error) throw error;
-      if (data) setClientes(data);
-    } catch (err: any) {
-      console.error('Error al cargar clientes:', err);
-      setErrorClientes(err?.message || 'Error al cargar clientes');
-    } finally {
-      setLoadingClientes(false);
-    }
-  };
-
-  const fetchCobradores = async () => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, nombre_completo')
-        .eq('rol', 'cobrador')
-        .order('nombre_completo', { ascending: true });
-      if (data) setCobradores(data);
-    } catch (err) {
-      console.error('Error al cargar cobradores:', err);
-    }
-  };
-
   const reasignarCobrador = async () => {
     if (!selectedUser || !nuevoCobrador) return;
     if (nuevoCobrador === selectedUser.cobrador_asignado_id) {
@@ -127,7 +82,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
       // Actualizar estado local para reflejar el cambio sin recargar todo
       setSelectedUser((prev: any) => ({ ...prev, cobrador_asignado_id: nuevoCobrador }));
-      fetchClientes();
+      mutateClientes();
     } catch (error: any) {
       alert('Error al reasignar: ' + error.message);
     } finally {
@@ -157,7 +112,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
         profiles: { ...prev.profiles, nombre_completo: editForm.nombre_completo, telefono: editForm.telefono },
       }));
       setEditando(false);
-      fetchClientes();
+      mutateClientes();
     } catch (error: any) {
       alert('Error al guardar: ' + error.message);
     } finally {
@@ -215,7 +170,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
       alert(`✅ Nuevo crédito creado. Pago diario: $${Math.round(cuotaDiaria).toLocaleString('es-MX')}`);
       setShowNuevoCredito(false);
       setNuevoCredito({ monto_total: 0, num_pagos: 28, tasa: 0 });
-      fetchClientes();
+      mutateClientes();
     } catch (e: any) {
       alert('Error: ' + e.message);
     } finally {
@@ -260,7 +215,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
           : prev.credito,
       }));
       setExpandedCreditId(null);
-      fetchClientes();
+      mutateClientes();
     } catch (error: any) {
       alert('Error: ' + error.message);
     } finally {
@@ -301,7 +256,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
     if (!error) {
       alert(`Cliente marcado como ${nuevoEstado}`);
-      fetchClientes();
+      mutateClientes();
       setSelectedUser(null);
     }
   };
@@ -334,7 +289,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
       alert('Cliente eliminado correctamente.');
       pendingDeleteRef.current = null;
-      fetchClientes();
+      mutateClientes();
     } catch (error) {
       console.error('Error al eliminar cliente:', error);
       alert('Ocurrió un error al eliminar el cliente.');
@@ -680,7 +635,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
-  const filteredClientes = clientes.filter((cliente) => {
+  const filteredClientes = useMemo(() => clientes.filter((cliente) => {
     const credito = cliente.creditos && cliente.creditos.length > 0 ? cliente.creditos[0] : null;
     const estadoActual = (credito?.estado || 'activo').toLowerCase();
     const nombre = (cliente.profiles?.nombre_completo || "").toLowerCase();
@@ -690,7 +645,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     const matchesStatus = filter === 'todos' || estadoActual === filter;
     const matchesSearch = !term || nombre.includes(term) || numero.includes(term);
     return matchesStatus && matchesSearch;
-  });
+  }), [clientes, searchQuery, statusFilter]);
 
   const toggleSeleccion = (id: string) => {
     setSelectedIds((prev) => {
@@ -742,7 +697,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
 
       alert(`${ids.length} cliente${ids.length > 1 ? 's' : ''} eliminado${ids.length > 1 ? 's' : ''} correctamente.`);
       setSelectedIds(new Set());
-      fetchClientes();
+      mutateClientes();
     } catch (error) {
       console.error('Error al eliminar clientes seleccionados:', error);
       alert('Ocurrió un error al eliminar los clientes seleccionados.');
@@ -1197,10 +1152,10 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
             <div className="w-5 h-5 border-2 border-gray-600 border-t-red-500 rounded-full animate-spin" />
             <span className="text-sm">Cargando clientes...</span>
           </div>
-        ) : errorClientes ? (
+        ) : clientesError ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-red-400 text-sm mb-3">{errorClientes}</p>
-            <button onClick={fetchClientes} className="text-xs bg-gray-800 text-gray-300 px-4 py-2 rounded-full">Reintentar</button>
+            <p className="text-red-400 text-sm mb-3">{clientesError.message || 'Error al cargar clientes'}</p>
+            <button onClick={() => mutateClientes()} className="text-xs bg-gray-800 text-gray-300 px-4 py-2 rounded-full">Reintentar</button>
           </div>
         ) : filteredClientes.length === 0 ? (
           <p className="text-center py-10 text-gray-500 text-sm">No se encontraron resultados</p>

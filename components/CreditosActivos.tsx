@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useMemo } from 'react';
+import { useClientesConCreditos } from '../lib/hooks/useClientesConCreditos';
+import { useCobradores } from '../lib/hooks/useCobradores';
 
 const MORA_DIA = 50;
 
@@ -173,54 +174,41 @@ function ModalHistorial({ credito, onClose }: { credito: any; onClose: () => voi
 }
 
 export default function CreditosActivos({ searchQuery }: { searchQuery: string }) {
-  const [creditos, setCreditos] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  const { clientes, loading } = useClientesConCreditos();
+  const { cobradores } = useCobradores();
   const [orden, setOrden] = useState<Orden>('reciente');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'activo' | 'atrasado'>('todos');
   const [historialCredito, setHistorialCredito] = useState<any | null>(null);
 
-  useEffect(() => {
-    cargar();
-  }, []);
-
-  const cargar = async () => {
-    setLoading(true);
-    try {
-      const { data: creds } = await supabase
-        .from('creditos')
-        .select(`
-          id, monto_total, monto_diario, semanas_autorizadas,
-          tasa_interes_porcentaje, estado, fecha_inicio,
-          pagos_diarios(id, pagado, fecha_esperada, numero_dia, mora, monto_pagado),
-          clientes(numero_cliente, cobrador_asignado_id, profiles(nombre_completo))
-        `)
-        .in('estado', ['activo', 'atrasado'])
-        .order('fecha_inicio', { ascending: false });
-
-      if (!creds) return;
-
-      const cobradorIds = [...new Set(
-        creds.map((c: any) => c.clientes?.cobrador_asignado_id).filter(Boolean)
-      )] as string[];
-
-      let profileMap: Record<string, string> = {};
-      if (cobradorIds.length) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, nombre_completo')
-          .in('id', cobradorIds);
-        (profs || []).forEach((p: any) => { profileMap[p.id] = p.nombre_completo; });
-      }
-
-      setCreditos(creds);
-      setProfiles(profileMap);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const hoy = new Date().toISOString().split('T')[0];
+
+  const profiles = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of cobradores) map[c.id] = c.nombre_completo;
+    return map;
+  }, [cobradores]);
+
+  // Deriva la lista de créditos activos/atrasados del dataset compartido de
+  // clientes en vez de pedirlos aparte — evita repetir la misma query
+  // pesada (creditos + pagos_diarios anidados) que ya trae TableWithDialog.
+  const creditos = useMemo(() => {
+    const list: any[] = [];
+    for (const cliente of clientes) {
+      for (const credito of cliente.creditos || []) {
+        if (credito.estado === 'activo' || credito.estado === 'atrasado') {
+          list.push({
+            ...credito,
+            clientes: {
+              numero_cliente: cliente.numero_cliente,
+              cobrador_asignado_id: cliente.cobrador_asignado_id,
+              profiles: { nombre_completo: cliente.profiles?.nombre_completo },
+            },
+          });
+        }
+      }
+    }
+    return list.sort((a, b) => (b.fecha_inicio || '').localeCompare(a.fecha_inicio || ''));
+  }, [clientes]);
 
   const enriquecidos = useMemo(() => creditos.map((c: any) => {
     const pagos: any[] = c.pagos_diarios || [];
