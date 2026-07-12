@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { sendPushToAdmins, sendPushToUserIds } from '@/lib/sendPush';
 
 export async function POST(request: Request) {
@@ -87,9 +87,15 @@ export async function POST(request: Request) {
     }
 
     // Push nativa: admins + supervisor + cobrador
-    sendPushToAdmins('💳 Nuevo comprobante', msgNuevo).catch(() => {});
+    after(() => sendPushToAdmins('💳 Nuevo comprobante', msgNuevo).catch((e) => {
+      console.error('[push] Error notificando nuevo comprobante a admins:', e);
+    }));
     const staffIds = [supervisorId, cobradorId].filter(Boolean) as string[];
-    if (staffIds.length) sendPushToUserIds(staffIds, '💳 Nuevo comprobante', msgNuevo).catch(() => {});
+    if (staffIds.length) {
+      after(() => sendPushToUserIds(staffIds, '💳 Nuevo comprobante', msgNuevo).catch((e) => {
+        console.error('[push] Error notificando nuevo comprobante a staff:', e);
+      }));
+    }
 
     return NextResponse.json({ success: true, transferencia: data });
   } catch (error: any) {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { sendPushToCliente, sendPushToUserIds } from '@/lib/sendPush';
 
 const MORA_POR_DIA = 50;
@@ -136,7 +136,9 @@ export async function POST(request: Request) {
           mensaje: msgCliente,
           tipo: 'pago',
         });
-        sendPushToCliente(trans.cliente_id, '✅ ¡Pago confirmado!', msgCliente).catch(() => {});
+        after(() => sendPushToCliente(trans.cliente_id, '✅ ¡Pago confirmado!', msgCliente).catch((e) => {
+          console.error('[push] Error notificando al cliente:', e);
+        }));
       }
 
       // Notificar al COBRADOR — para que le aparezca el pago al abrir la app
@@ -154,12 +156,16 @@ export async function POST(request: Request) {
           mensaje: msgCobrador,
           tipo: 'pago',
         });
-        sendPushToUserIds([cobradorId], '💳 Pago aprobado', msgCobrador).catch(() => {});
+        after(() => sendPushToUserIds([cobradorId], '💳 Pago aprobado', msgCobrador).catch((e) => {
+          console.error('[push] Error notificando al cobrador:', e);
+        }));
       }
 
       // Notificar al SUPERVISOR
       if (supervisorId) {
-        sendPushToUserIds([supervisorId], '✅ Pago aprobado', `Pago de ${montoFmt} aprobado.`).catch(() => {});
+        after(() => sendPushToUserIds([supervisorId], '✅ Pago aprobado', `Pago de ${montoFmt} aprobado.`).catch((e) => {
+          console.error('[push] Error notificando al supervisor:', e);
+        }));
       }
 
     } else if (accion === 'rechazar') {
@@ -179,16 +185,22 @@ export async function POST(request: Request) {
           mensaje: msgRechazado,
           tipo: 'info',
         });
-        sendPushToCliente(trans.cliente_id, '❌ Comprobante rechazado', msgRechazado).catch(() => {});
+        after(() => sendPushToCliente(trans.cliente_id, '❌ Comprobante rechazado', msgRechazado).catch((e) => {
+          console.error('[push] Error notificando rechazo al cliente:', e);
+        }));
       }
 
       if (supervisorId) {
-        sendPushToUserIds([supervisorId], '❌ Comprobante rechazado', `Un comprobante de ${montoFmt} fue rechazado.`).catch(() => {});
+        after(() => sendPushToUserIds([supervisorId], '❌ Comprobante rechazado', `Un comprobante de ${montoFmt} fue rechazado.`).catch((e) => {
+          console.error('[push] Error notificando rechazo al supervisor:', e);
+        }));
       }
 
       // Notificar al cobrador del rechazo también
       if (cobradorId) {
-        sendPushToUserIds([cobradorId], '❌ Comprobante rechazado', `Un comprobante fue rechazado. El cliente debe pagar en efectivo.`).catch(() => {});
+        after(() => sendPushToUserIds([cobradorId], '❌ Comprobante rechazado', `Un comprobante fue rechazado. El cliente debe pagar en efectivo.`).catch((e) => {
+          console.error('[push] Error notificando rechazo al cobrador:', e);
+        }));
       }
 
       // Broadcast de rechazo (para que NotifBell actualice en tiempo real)

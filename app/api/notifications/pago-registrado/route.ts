@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest, after } from 'next/server';
 import { sendPushToAdmins } from '@/lib/sendPush';
 
 export async function POST(request: NextRequest) {
@@ -38,8 +38,13 @@ export async function POST(request: NextRequest) {
       });
     } catch { }
 
-    // Push nativa a admins
-    sendPushToAdmins(titulo, mensaje).catch(() => {});
+    // Push nativa a admins — se ejecuta después de responder (after()), pero
+    // Next.js garantiza que corre hasta terminar aunque Vercel ya haya
+    // devuelto la respuesta al cliente (a diferencia de un fire-and-forget
+    // suelto, que puede quedar a medias si la función serverless se cierra).
+    after(() => sendPushToAdmins(titulo, mensaje).catch((e) => {
+      console.error('[push] Error enviando push a admins:', e);
+    }));
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
