@@ -93,10 +93,12 @@ CREATE INDEX IF NOT EXISTS idx_solicitudes_estado_created
 CREATE INDEX IF NOT EXISTS idx_solicitudes_asesor_created
   ON solicitudes (asesor_id, created_at DESC);
 
--- TableWithDialog.tsx: .eq('cliente_id', X).order('created_at', desc).limit(1)
--- para traer la solicitud más reciente de "ver más" en el expediente.
-CREATE INDEX IF NOT EXISTS idx_solicitudes_cliente_created
-  ON solicitudes (cliente_id, created_at DESC);
+-- NOTA: se quitó un índice sobre solicitudes(cliente_id) porque esa columna
+-- no existe en la tabla. TableWithDialog.tsx:277 hace
+-- .eq('cliente_id', clienteId) contra 'solicitudes', pero esta tabla nunca
+-- guarda cliente_id (solo asesor_id — ver components/SupervisorForm.tsx).
+-- Es un bug de la app (la query falla y el catch la esconde como "sin
+-- documentos"), no algo que un índice pueda resolver. Ver mensaje aparte.
 
 
 -- ── transferencias ───────────────────────────────────────────────────────
