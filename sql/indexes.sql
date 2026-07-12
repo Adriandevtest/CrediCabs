@@ -93,12 +93,11 @@ CREATE INDEX IF NOT EXISTS idx_solicitudes_estado_created
 CREATE INDEX IF NOT EXISTS idx_solicitudes_asesor_created
   ON solicitudes (asesor_id, created_at DESC);
 
--- NOTA: se quitó un índice sobre solicitudes(cliente_id) porque esa columna
--- no existe en la tabla. TableWithDialog.tsx:277 hace
--- .eq('cliente_id', clienteId) contra 'solicitudes', pero esta tabla nunca
--- guarda cliente_id (solo asesor_id — ver components/SupervisorForm.tsx).
--- Es un bug de la app (la query falla y el catch la esconde como "sin
--- documentos"), no algo que un índice pueda resolver. Ver mensaje aparte.
+-- NOTA: el índice sobre solicitudes(cliente_id) se movió a
+-- sql/schema_fixes.sql, porque esa columna no existía en la tabla —
+-- primero hay que agregarla (ALTER TABLE) antes de poder indexarla.
+-- Corre schema_fixes.sql antes o después de este archivo, en cualquier
+-- orden (son independientes entre sí).
 
 
 -- ── transferencias ───────────────────────────────────────────────────────

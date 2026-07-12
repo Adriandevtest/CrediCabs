@@ -135,6 +135,7 @@ export default function BandejaPage() {
           semanas_autorizadas: formData.semanas,
           tasa_interes_porcentaje: tasaPorcentaje,
           cobrador_asignado_id: formData.cobrador_id,
+          solicitud_id: selectedSolicitud.id,
         }),
       });
       if (!res.ok) {

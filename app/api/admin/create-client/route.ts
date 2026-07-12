@@ -12,7 +12,8 @@ export async function POST(request: Request) {
       tipo_esquema,
       semanas_autorizadas,
       tasa_interes_porcentaje,
-      cobrador_asignado_id
+      cobrador_asignado_id,
+      solicitud_id
     } = await request.json();
 
     if (!nombre_completo || !monto_total || !semanas_autorizadas || !cobrador_asignado_id) {
@@ -83,6 +84,16 @@ export async function POST(request: Request) {
       });
 
     if (clienteError) throw clienteError;
+
+    // 3b. Vincular la solicitud de origen (si vino de un prospecto aprobado
+    // en bandeja) para que el expediente del cliente pueda mostrar el INE y
+    // comprobante capturados durante la solicitud. No es fatal si falla.
+    if (solicitud_id) {
+      await supabaseAdmin
+        .from('solicitudes')
+        .update({ cliente_id: clienteId })
+        .eq('id', solicitud_id);
+    }
 
     // 4. Calcular interés y cuota (misma fórmula para todos los esquemas)
     const tasaPorcentaje = parseFloat(tasa_interes_porcentaje?.toString() || '0');

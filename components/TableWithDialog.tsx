@@ -274,12 +274,12 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     const { data, error } = await supabase
       .from('solicitudes')
       .select('ine_url, comprobante_url, ocupacion, ingreso_mensual, telefono, direccion')
-      .eq('cliente_id', clienteId)  // ✅ Cambiar a cliente_id
+      .eq('cliente_id', clienteId)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
-    console.log('Detalle extra query:', { data, error, clienteId });
+    if (error) console.error('Error al cargar detalle extra:', error);
     setDetalleExtra(data || null);
   } catch {
     setDetalleExtra(null);
