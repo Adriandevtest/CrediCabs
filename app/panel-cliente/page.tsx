@@ -134,15 +134,23 @@ export default function PanelCliente() {
   }, []);
 
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
+    // `cancelled` + variables declared in the outer scope (instead of building the
+    // cleanup closure inside the .then()) guard against React Strict Mode's
+    // mount→cleanup→mount: if cleanup fires before getUser() resolves, `cancelled`
+    // stops the callback from creating channels at all, so nothing gets orphaned.
+    let cancelled = false;
+    let chBc: ReturnType<typeof supabase.channel> | undefined;
+    let chPg: ReturnType<typeof supabase.channel> | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
 
     supabase.auth.getUser().then(({ data: { user } }) => {
+      if (cancelled) return;
       if (!user) { router.push('/login'); return; }
       const id = user.id;
       setClienteId(id);
       cargarDatos(id);
 
-      const chBc = supabase
+      chBc = supabase
         .channel(`pagos-cliente-${id}`)
         .on('broadcast', { event: 'pago_aprobado' }, () => {
           setPagoReciente(true);
@@ -151,7 +159,7 @@ export default function PanelCliente() {
         })
         .subscribe();
 
-      const chPg = supabase
+      chPg = supabase
         .channel(`cliente-pagos-rt-${id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pagos_diarios' }, () => {
           setPagoReciente(true);
@@ -160,16 +168,15 @@ export default function PanelCliente() {
         })
         .subscribe();
 
-      const poll = setInterval(() => cargarDatos(id), 12000);
-
-      cleanup = () => {
-        supabase.removeChannel(chPg);
-        supabase.removeChannel(chBc);
-        clearInterval(poll);
-      };
+      poll = setInterval(() => cargarDatos(id), 12000);
     });
 
-    return () => { cleanup?.(); };
+    return () => {
+      cancelled = true;
+      if (chPg) supabase.removeChannel(chPg);
+      if (chBc) supabase.removeChannel(chBc);
+      if (poll) clearInterval(poll);
+    };
   }, [router, cargarDatos]);
 
   // Set calendar to the month of first pending payment once data loads

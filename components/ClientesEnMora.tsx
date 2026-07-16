@@ -71,7 +71,7 @@ export default function ClientesEnMora({ searchQuery }: { searchQuery: string })
   const filtrados = useMemo(() => clientes.filter((c) => {
     const matchSearch = !searchQuery ||
       c.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(c.numero_cliente).includes(searchQuery);
+      String(c.numero_cliente).toLowerCase().includes(searchQuery.toLowerCase());
     const matchCobrador = !cobradorFiltro || c.cobrador_nombre === cobradorFiltro;
     return matchSearch && matchCobrador;
   }), [clientes, searchQuery, cobradorFiltro]);

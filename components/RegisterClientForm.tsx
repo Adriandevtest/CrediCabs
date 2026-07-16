@@ -11,7 +11,7 @@ interface Cobrador {
 
 type TipoEsquema = 'diario' | 'semanal' | 'quincenal';
 
-export default function RegisterClientForm({ cobradores, onSuccess }: { cobradores: Cobrador[], onSuccess?: () => void }) {
+export default function RegisterClientForm({ cobradores, onSuccess, existente = false }: { cobradores: Cobrador[], onSuccess?: () => void, existente?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -26,6 +26,7 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
     num_quincenas: 4,
     tasa_interes: 0,
     cobrador_id: '',
+    dias_ya_pagados: 0,
   });
 
   const numPagos = formData.tipo_esquema === 'quincenal' ? formData.num_quincenas : formData.semanas;
@@ -39,6 +40,10 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
     if (!formRef.current?.reportValidity()) return;
     if (formData.tipo_esquema === 'quincenal' && formData.num_quincenas < 1) {
       alert('Ingresa un número de quincenas válido.');
+      return;
+    }
+    if (existente && (formData.dias_ya_pagados < 0 || formData.dias_ya_pagados > numPagos)) {
+      alert(`Los días ya pagados deben estar entre 0 y ${numPagos}.`);
       return;
     }
     setPinOpen(true);
@@ -62,6 +67,7 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
           semanas_autorizadas: numPagos,
           tasa_interes_porcentaje: formData.tasa_interes,
           cobrador_asignado_id: formData.cobrador_id,
+          dias_ya_pagados: existente ? formData.dias_ya_pagados : 0,
         }),
       });
 
@@ -89,8 +95,13 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
   return (
     <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="p-4 md:p-6 bg-gray-950 flex flex-col gap-4 w-full">
       <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 border-l-4 border-yellow-500 pl-3">
-        Nuevo Cliente
+        {existente ? 'Cliente Existente' : 'Nuevo Cliente'}
       </h2>
+      {existente && (
+        <p className="text-gray-500 text-sm -mt-2">
+          Para clientes que ya traías en papel — puedes marcar cuántos días de pago ya cubrió antes de entrar a la app.
+        </p>
+      )}
 
       <input
         type="text"
@@ -237,6 +248,25 @@ export default function RegisterClientForm({ cobradores, onSuccess }: { cobrador
           ))}
         </select>
       </div>
+
+      {/* Días ya pagados (solo Cliente Existente) */}
+      {existente && (
+        <div className="flex flex-col">
+          <label className="text-gray-400 text-sm mb-1 font-medium">Días ya pagados (cobrados en papel)</label>
+          <input
+            type="number"
+            min={0}
+            max={numPagos}
+            placeholder="Ej: 5"
+            className="p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-red-500 outline-none w-full"
+            value={formData.dias_ya_pagados}
+            onChange={(e) => setFormData({ ...formData, dias_ya_pagados: Number(e.target.value) })}
+          />
+          <p className="text-gray-600 text-xs mt-1">
+            Se marcarán como pagados los primeros {formData.dias_ya_pagados || 0} de {numPagos} pagos. No afecta Capital Actual.
+          </p>
+        </div>
+      )}
 
       {/* Desglose */}
       {formData.monto > 0 && numPagos > 0 && (

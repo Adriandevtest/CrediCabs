@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
+import { requireAuth } from '@/lib/requireAdmin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +11,16 @@ export async function POST(request: NextRequest) {
 
     if (!userId || !nombre) {
       return NextResponse.json({ error: 'Faltan datos obligatorios.' }, { status: 400 });
+    }
+
+    // Cualquier usuario autenticado puede editar su propio perfil (UserNav);
+    // solo un admin puede editar el perfil de alguien más (alta de personal).
+    const auth = await requireAuth();
+    if (!auth.authorized) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    if (auth.userId !== userId && auth.rol !== 'admin') {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 403 });
     }
 
     const supabaseAdmin = createClient(

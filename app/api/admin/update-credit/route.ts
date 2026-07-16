@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/requireAdmin';
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAdmin();
+    if (!auth.authorized) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const { credito_id, monto_total, num_pagos } = await request.json();
 
     if (!credito_id || !monto_total || !num_pagos) {

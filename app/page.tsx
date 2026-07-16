@@ -154,7 +154,9 @@ export default function Home() {
       const { data: totalesRpc } = await supabase.rpc('total_cobrado_historico').single();
       if (totalesRpc) {
         const t = totalesRpc as any;
-        setTotalCobradoHistorico(Number(t.total_cuotas || 0) + Number(t.total_mora || 0));
+        setTotalCobradoHistorico(
+          Number(t.total_cuotas || 0) + Number(t.total_mora || 0) + Number(t.total_abonos_parciales || 0)
+        );
       }
 
       // Meta del día: todos los pagos esperados hoy
@@ -734,8 +736,8 @@ export default function Home() {
                   {abonosParciales.map((p, i) => {
                     const cliente = p.creditos?.clientes;
                     const cuota = Number(p.creditos?.monto_diario || 0);
-                    const abonado = Number(p.monto_pagado || 0);
-                    const resta = Math.max(0, cuota - abonado);
+                    const abonado = Math.round(Number(p.monto_pagado || 0));
+                    const resta = Math.round(Math.max(0, cuota - abonado));
                     return (
                       <tr key={p.id} className={`hover:bg-gray-800/40 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-800/20'}`}>
                         <td className="px-6 py-3 text-white font-medium">{cliente?.profiles?.nombre_completo || '—'}</td>
@@ -764,8 +766,8 @@ export default function Home() {
               {abonosParciales.map((p) => {
                 const cliente = p.creditos?.clientes;
                 const cuota = Number(p.creditos?.monto_diario || 0);
-                const abonado = Number(p.monto_pagado || 0);
-                const resta = Math.max(0, cuota - abonado);
+                const abonado = Math.round(Number(p.monto_pagado || 0));
+                const resta = Math.round(Math.max(0, cuota - abonado));
                 return (
                   <div key={p.id} className="px-4 py-3 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">

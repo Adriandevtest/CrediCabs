@@ -1,12 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse, after } from 'next/server';
 import { sendPushToCliente, sendPushToUserIds } from '@/lib/sendPush';
-
-const MORA_POR_DIA = 50;
+import { requireAdmin } from '@/lib/requireAdmin';
 
 export async function POST(request: Request) {
   try {
-    const { transferenciaId, pagoId, accion, mora = 0 } = await request.json();
+    const auth = await requireAdmin();
+    if (!auth.authorized) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const { transferenciaId, pagoId, accion } = await request.json();
 
     if (!transferenciaId || !accion) {
       return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
@@ -17,28 +21,6 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch transferencia — sin join a creditos para evitar fallo si la FK no está configurada
-    const { data: trans, error: transError } = await supabaseAdmin
-      .from('transferencias')
-      .select('cliente_id, credito_id, monto')
-      .eq('id', transferenciaId)
-      .single();
-
-    if (transError || !trans) {
-      return NextResponse.json({ error: 'Transferencia no encontrada' }, { status: 404 });
-    }
-
-    // Buscar cobrador y supervisor en paralelo
-    const [clienteRow, creditoRow] = await Promise.all([
-      supabaseAdmin.from('clientes').select('cobrador_asignado_id').eq('id', trans.cliente_id).single(),
-      trans.credito_id
-        ? supabaseAdmin.from('creditos').select('creado_por').eq('id', trans.credito_id).single()
-        : Promise.resolve({ data: null }),
-    ]);
-
-    const cobradorId: string | null = clienteRow.data?.cobrador_asignado_id ?? null;
-    const supervisorId: string | null = (creditoRow as any).data?.creado_por ?? null;
-
     const broadcastHeaders = {
       'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
       'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
@@ -46,65 +28,25 @@ export async function POST(request: Request) {
     };
 
     if (accion === 'aprobar') {
-      const today = new Date().toISOString().split('T')[0];
+      // aprobar_transferencia() hace TODAS las escrituras (pagos_diarios,
+      // transferencias, creditos) dentro de una sola transacción de Postgres —
+      // si algo falla a mitad de camino, se revierte todo, no queda estado a medias.
+      const { data: rpcRows, error: rpcError } = await supabaseAdmin
+        .rpc('aprobar_transferencia', { p_transferencia_id: transferenciaId, p_pago_id: pagoId ?? null });
 
-      // Marcar TODOS los pagos vencidos del crédito como pagados, igual que hace el cobrador.
-      // Si el cliente envió un comprobante que el admin aprobó, se entiende que cubre
-      // la cuota actual + la mora acumulada de días anteriores.
-      let pagosActualizados = 0;
-      if (trans?.credito_id) {
-        const { data: pagosVencidos } = await supabaseAdmin
-          .from('pagos_diarios')
-          .select('id, fecha_esperada')
-          .eq('credito_id', trans.credito_id)
-          .eq('pagado', false)
-          .lte('fecha_esperada', today)
-          .order('numero_dia', { ascending: true });
-
-        if (pagosVencidos && pagosVencidos.length > 0) {
-          for (const pago of pagosVencidos) {
-            const esHoy = pago.fecha_esperada === today;
-            const { error: errPago } = await supabaseAdmin
-              .from('pagos_diarios')
-              .update({ pagado: true, mora: esHoy ? 0 : MORA_POR_DIA })
-              .eq('id', pago.id);
-            if (errPago) throw errPago;
-            pagosActualizados++;
-          }
-        } else if (pagoId) {
-          // No hay vencidos pero viene un pagoId específico (pago de hoy sin atraso)
-          const { error: errPago } = await supabaseAdmin
-            .from('pagos_diarios')
-            .update({ pagado: true, mora: 0 })
-            .eq('id', pagoId);
-          if (errPago) throw errPago;
-          pagosActualizados++;
+      if (rpcError) {
+        if (rpcError.message?.includes('no encontrada')) {
+          return NextResponse.json({ error: 'Transferencia no encontrada' }, { status: 404 });
         }
+        throw rpcError;
       }
 
-      // Marcar transferencia como aprobada
-      const { error } = await supabaseAdmin
-        .from('transferencias')
-        .update({ estado: 'aprobado' })
-        .eq('id', transferenciaId);
-      if (error) throw error;
+      const trans = rpcRows?.[0];
+      if (!trans) throw new Error('aprobar_transferencia no devolvió resultado');
 
-      // Verificar si era el último pago y liquidar crédito
-      if (trans?.credito_id) {
-        const { count } = await supabaseAdmin
-          .from('pagos_diarios')
-          .select('id', { count: 'exact', head: true })
-          .eq('credito_id', trans.credito_id)
-          .eq('pagado', false);
-        if (count !== null && count === 0) {
-          await supabaseAdmin
-            .from('creditos')
-            .update({ estado: 'liquidado' })
-            .eq('id', trans.credito_id);
-        }
-      }
-
-      const montoFmt = `$${Number(trans?.monto).toLocaleString('es-MX')}`;
+      const cobradorId: string | null = trans.cobrador_id ?? null;
+      const supervisorId: string | null = trans.supervisor_id ?? null;
+      const montoFmt = `$${Number(trans.monto).toLocaleString('es-MX')}`;
 
       // Broadcast en tiempo real — AWAIT obligatorio: en Vercel la función se cierra
       // al devolver la respuesta y un fetch sin await nunca se completa.
@@ -169,13 +111,22 @@ export async function POST(request: Request) {
       }
 
     } else if (accion === 'rechazar') {
-      const { error } = await supabaseAdmin
-        .from('transferencias')
-        .update({ estado: 'rechazado' })
-        .eq('id', transferenciaId);
-      if (error) throw error;
+      const { data: rpcRows, error: rpcError } = await supabaseAdmin
+        .rpc('rechazar_transferencia', { p_transferencia_id: transferenciaId });
 
-      const montoFmt = `$${Number(trans?.monto).toLocaleString('es-MX')}`;
+      if (rpcError) {
+        if (rpcError.message?.includes('no encontrada')) {
+          return NextResponse.json({ error: 'Transferencia no encontrada' }, { status: 404 });
+        }
+        throw rpcError;
+      }
+
+      const trans = rpcRows?.[0];
+      if (!trans) throw new Error('rechazar_transferencia no devolvió resultado');
+
+      const cobradorId: string | null = trans.cobrador_id ?? null;
+      const supervisorId: string | null = trans.supervisor_id ?? null;
+      const montoFmt = `$${Number(trans.monto).toLocaleString('es-MX')}`;
 
       if (trans?.cliente_id) {
         const msgRechazado = 'Tu comprobante no pudo ser verificado. Por favor contacta a tu cobrador.';

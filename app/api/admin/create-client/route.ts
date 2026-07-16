@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/requireAdmin';
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAdmin();
+    if (!auth.authorized) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const {
       nombre_completo,
       email,
@@ -13,7 +19,8 @@ export async function POST(request: Request) {
       semanas_autorizadas,
       tasa_interes_porcentaje,
       cobrador_asignado_id,
-      solicitud_id
+      solicitud_id,
+      dias_ya_pagados
     } = await request.json();
 
     if (!nombre_completo || !monto_total || !semanas_autorizadas || !cobrador_asignado_id) {
@@ -38,6 +45,11 @@ export async function POST(request: Request) {
     if (typeof monto_total !== 'number' || monto_total <= 0) {
       return NextResponse.json({ error: 'El monto debe ser un número positivo.' }, { status: 400 });
     }
+
+    // Cliente Existente: días ya cubiertos en papel antes de entrar a la app.
+    // Se marcan pagado=true + pre_existente=true para que el calendario/progreso
+    // del cliente sea correcto sin inflar Capital Actual (ver sql/pre_existente.sql).
+    const diasYaPagados = Math.max(0, Math.min(numPagos, Math.floor(Number(dias_ya_pagados) || 0)));
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,7 +131,7 @@ export async function POST(request: Request) {
     if (creditoError) throw creditoError;
 
     // 5. Generar calendario de pagos según esquema
-    const pagos: { credito_id: string; numero_dia: number; fecha_esperada: string; pagado: boolean }[] = [];
+    const pagos: { credito_id: string; numero_dia: number; fecha_esperada: string; pagado: boolean; pre_existente: boolean }[] = [];
     let fechaActual = new Date();
 
     if (esquema === 'diario') {
@@ -133,6 +145,7 @@ export async function POST(request: Request) {
           numero_dia: i + 1,
           fecha_esperada: new Date(fechaActual).toLocaleDateString('en-CA'),
           pagado: false,
+          pre_existente: false,
         });
         fechaActual.setDate(fechaActual.getDate() + 1);
         while (fechaActual.getDay() === 0 || fechaActual.getDay() === 6) {
@@ -150,6 +163,7 @@ export async function POST(request: Request) {
           numero_dia: i + 1,
           fecha_esperada: new Date(fechaActual).toLocaleDateString('en-CA'),
           pagado: false,
+          pre_existente: false,
         });
         fechaActual.setDate(fechaActual.getDate() + 7);
       }
@@ -161,9 +175,15 @@ export async function POST(request: Request) {
           numero_dia: i + 1,
           fecha_esperada: new Date(fechaActual).toLocaleDateString('en-CA'),
           pagado: false,
+          pre_existente: false,
         });
         fechaActual.setDate(fechaActual.getDate() + 15);
       }
+    }
+
+    for (let i = 0; i < diasYaPagados; i++) {
+      pagos[i].pagado = true;
+      pagos[i].pre_existente = true;
     }
 
     const { error: pagosError } = await supabaseAdmin

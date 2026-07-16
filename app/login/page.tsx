@@ -287,6 +287,7 @@ export default function LoginPage() {
               onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
               className="w-full pl-11 pr-4 py-[14px] text-sm rounded-2xl placeholder:text-[rgba(255,255,255,0.28)]"
               style={inputStyle(emailFocused)}
+              suppressHydrationWarning
             />
           </div>
 
@@ -308,6 +309,7 @@ export default function LoginPage() {
               onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
               className="w-full pl-11 pr-11 py-[14px] text-sm rounded-2xl placeholder:text-[rgba(255,255,255,0.28)]"
               style={inputStyle(passwordFocused)}
+              suppressHydrationWarning
             />
             <button
               type="button"

@@ -11,13 +11,20 @@ interface ActionModalProps {
 }
 
 export default function ActionModal({ isOpen, onClose, cobradores }: ActionModalProps) {
-  const [step, setStep] = useState<'select' | 'cliente' | 'cobrador'>('select');
+  const [step, setStep] = useState<'select' | 'cliente' | 'cliente-existente' | 'cobrador'>('select');
 
   if (!isOpen) return null;
 
   const handleClose = () => {
     setStep('select');
     onClose();
+  };
+
+  const titulos: Record<typeof step, string> = {
+    select: 'Nuevo Registro',
+    cliente: 'Alta de Cliente',
+    'cliente-existente': 'Cliente Existente',
+    cobrador: 'Alta de Cobrador',
   };
 
   return (
@@ -29,7 +36,7 @@ export default function ActionModal({ isOpen, onClose, cobradores }: ActionModal
         {/* Cabecera fija */}
         <div className="shrink-0 p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 rounded-t-2xl md:rounded-t-2xl">
           <h2 className="text-xl font-bold text-white uppercase tracking-widest">
-            {step === 'select' ? 'Nuevo Registro' : step === 'cliente' ? 'Alta de Cliente' : 'Alta de Cobrador'}
+            {titulos[step]}
           </h2>
           <button onClick={handleClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
@@ -54,12 +61,29 @@ export default function ActionModal({ isOpen, onClose, cobradores }: ActionModal
                 <h3 className="text-white font-bold text-lg mb-1">Nuevo Cobrador</h3>
                 <p className="text-gray-400 text-sm">Añadir personal al equipo de campo.</p>
               </button>
+              <button
+                onClick={() => setStep('cliente-existente')}
+                className="group p-8 border border-gray-800 rounded-xl hover:border-blue-500 transition-all bg-gray-900 text-center md:col-span-2"
+              >
+                <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">📋</div>
+                <h3 className="text-white font-bold text-lg mb-1">Cliente Existente</h3>
+                <p className="text-gray-400 text-sm">Dar de alta un cliente que ya traías en papel, con días de pago ya cubiertos.</p>
+              </button>
             </div>
           )}
 
           {step === 'cliente' && (
             <div>
               <RegisterClientForm cobradores={cobradores} />
+              <div className="px-6 pb-6">
+                <button onClick={() => setStep('select')} className="text-gray-500 text-sm hover:underline">← Volver atrás</button>
+              </div>
+            </div>
+          )}
+
+          {step === 'cliente-existente' && (
+            <div>
+              <RegisterClientForm cobradores={cobradores} existente />
               <div className="px-6 pb-6">
                 <button onClick={() => setStep('select')} className="text-gray-500 text-sm hover:underline">← Volver atrás</button>
               </div>

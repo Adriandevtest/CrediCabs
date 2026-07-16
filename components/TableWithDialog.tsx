@@ -639,7 +639,7 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
     const credito = cliente.creditos && cliente.creditos.length > 0 ? cliente.creditos[0] : null;
     const estadoActual = (credito?.estado || 'activo').toLowerCase();
     const nombre = (cliente.profiles?.nombre_completo || "").toLowerCase();
-    const numero = (cliente.numero_cliente || "").toString();
+    const numero = (cliente.numero_cliente || "").toString().toLowerCase();
     const term = (searchQuery || "").toLowerCase().trim();
     const filter = (statusFilter || 'todos').toLowerCase();
     const matchesStatus = filter === 'todos' || estadoActual === filter;
