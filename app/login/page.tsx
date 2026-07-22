@@ -182,8 +182,8 @@ export default function LoginPage() {
       <motion.div
         className="relative z-10 w-full flex flex-col items-center px-6"
         style={{ maxWidth: 380 }}
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
         {/* ── Logo ── */}
@@ -265,8 +265,8 @@ export default function LoginPage() {
             boxShadow:
               '0 40px 80px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.07) inset',
           }}
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.45, delay: 0.2 }}
         >
           {/* Email field */}
