@@ -12,6 +12,12 @@ import AdminPinModal from "./AdminPinModal";
 import { useCobradores } from "../lib/hooks/useCobradores";
 import { useClientesConCreditos } from "../lib/hooks/useClientesConCreditos";
 
+const fmtFecha = (d?: string | null) =>
+  d ? new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+
+const primerPago = (pagos?: { numero_dia: number; fecha_esperada: string }[]) =>
+  pagos?.length ? pagos.reduce((a, b) => (a.numero_dia <= b.numero_dia ? a : b)).fecha_esperada : null;
+
 export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }: { searchQuery: string, statusFilter?: string }) {
   const { clientes, loading: loadingClientes, error: clientesError, mutate: mutateClientes } = useClientesConCreditos();
   const { cobradores } = useCobradores();
@@ -763,6 +769,9 @@ export default function TableWithDialog({ searchQuery, statusFilter = 'todos' }:
                     </div>
                     <p className="text-gray-400 text-[10px] mt-0.5">
                       ${Math.round(c.monto_diario || 0).toLocaleString('es-MX')}/día · {c.semanas_autorizadas} pagos
+                    </p>
+                    <p className="text-gray-500 text-[10px] mt-0.5">
+                      Inicio: {fmtFecha(c.fecha_inicio)} · 1er pago: {fmtFecha(primerPago(c.pagos_diarios))}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

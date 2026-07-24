@@ -34,6 +34,14 @@ async function compressImage(file: File): Promise<File> {
   });
 }
 
+function fmtFecha(d?: string | null) {
+  return d ? new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+}
+
+function primerPago(pagos?: { numero_dia: number; fecha_esperada: string }[]) {
+  return pagos?.length ? pagos.reduce((a, b) => (a.numero_dia <= b.numero_dia ? a : b)).fecha_esperada : null;
+}
+
 function formatWA(tel: string) {
   const d = tel.replace(/\D/g, '');
   if (d.startsWith('52') && d.length >= 12) return d;
@@ -428,6 +436,14 @@ export default function PanelCliente() {
                   <div className="bg-gray-800/60 rounded-xl p-2.5">
                     <p className="text-gray-500 uppercase mb-0.5">Total a pagar</p>
                     <p className="text-white font-bold">${totalAPagar.toLocaleString('es-MX')}</p>
+                  </div>
+                  <div className="bg-gray-800/60 rounded-xl p-2.5">
+                    <p className="text-gray-500 uppercase mb-0.5">Inicio</p>
+                    <p className="text-white font-bold">{fmtFecha(credito.fecha_inicio)}</p>
+                  </div>
+                  <div className="bg-gray-800/60 rounded-xl p-2.5">
+                    <p className="text-gray-500 uppercase mb-0.5">1er pago</p>
+                    <p className="text-white font-bold">{fmtFecha(primerPago(credito.pagos_diarios))}</p>
                   </div>
                 </div>
               </div>
